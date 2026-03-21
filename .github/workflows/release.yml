@@ -52,22 +52,13 @@ jobs:
           body: |
             ## Download OpenEFB ${{ github.ref_name }}
 
-            | Platform | File | Description |
-            |----------|------|-------------|
-            | 🍎 macOS (Apple Silicon) | `OpenEFB-arm64.dmg` | Für M1/M2/M3/M4 Macs |
-            | 🍎 macOS (Intel) | `OpenEFB-x64.dmg` | Für Intel Macs |
-            | 🪟 Windows | `OpenEFB-Setup.exe` | Windows Installer |
+            | Platform | Datei |
+            |----------|-------|
+            | 🍎 macOS | **[OpenEFB.dmg](https://github.com/msoehl/openefb/releases/download/${{ github.ref_name }}/OpenEFB.dmg)** |
+            | 🪟 Windows | **[OpenEFB-Setup.exe](https://github.com/msoehl/openefb/releases/download/${{ github.ref_name }}/OpenEFB-Setup.exe)** |
 
-            > **macOS Hinweis:** Die App ist nicht signiert. Beim ersten Start: Rechtsklick → **Öffnen**.
+            > **macOS:** Nicht signiert — beim ersten Start Rechtsklick → **Öffnen**.
 
-            ---
-
-            <details>
-            <summary>ℹ️ Weitere Dateien (nur für Auto-Updater — nicht manuell herunterladen)</summary>
-
-            Die übrigen Dateien (`*.yml`, `*.blockmap`, `*.zip`) werden intern vom Auto-Updater verwendet,
-            um stille Hintergrund-Updates zu liefern. Diese müssen **nicht** manuell heruntergeladen werden.
-
-            </details>
+            > Die übrigen Dateien (`*.yml`, `*.blockmap`, `*.zip`) werden vom Auto-Updater benötigt und müssen nicht manuell heruntergeladen werden.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
