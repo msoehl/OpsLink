@@ -7,7 +7,41 @@ on:
   workflow_dispatch:
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create.outputs.upload_url }}
+    steps:
+      - name: Create GitHub Release
+        id: create
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: false
+          body: |
+            ## Download OpenEFB ${{ github.ref_name }}
+
+            | Platform | File | Description |
+            |----------|------|-------------|
+            | 🍎 macOS | `OpenEFB.dmg` | Installer disk image |
+            | 🪟 Windows | `OpenEFB-Setup.exe` | Installer |
+
+            > **macOS note:** The app is currently unsigned. On first launch, right-click → **Open**.
+
+            ---
+
+            <details>
+            <summary>ℹ️ Other files (auto-updater only — you don't need these)</summary>
+
+            The remaining files (`*.yml`, `*.blockmap`, `*.zip`) are used internally by the auto-updater
+            to deliver silent background updates. You do **not** need to download them manually.
+
+            </details>
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-mac:
+    needs: create-release
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +60,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
   build-windows:
+    needs: create-release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
