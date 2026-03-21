@@ -1,73 +1,60 @@
-# React + TypeScript + Vite
+<div align="center">
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+<img src="build/icon.svg" width="120" alt="OpenEFB Icon"/>
 
-Currently, two official plugins are available:
+# OpenEFB
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+**A free, open-source Electronic Flight Bag for flight simulator enthusiasts.**
 
-## React Compiler
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/msoehl/openefb)](https://github.com/msoehl/openefb/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/msoehl/openefb/release.yml)](https://github.com/msoehl/openefb/actions)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+</div>
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Features
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- **Flight Planning** — Load your SimBrief OFP with a single click. Overview, fuel summary, navlog and raw OFP text.
+- **Moving Map** — Live route display with VATSIM and IVAO traffic, aircraft icons, tooltips with DEP/DEST.
+- **ACARS / Hoppie Datalink** — Full CPDLC, PDC, D-ATIS, Oceanic and Position reporting via [Hoppie](https://www.hoppie.nl/acars/).
+- **Weather** — METAR & TAF for departure, destination and alternate with auto-refresh.
+- **Performance** — Takeoff and landing performance calculations from SimBrief data.
+- **Charts** — Direct link to external chart providers (Navigraph, etc.).
+- **Dark & Light Mode** — Fully theme-aware UI including the map tile layer.
+- **Auto-Updater** — In-app update check and one-click install from GitHub Releases.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+---
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Download
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Head to the [**Releases**](https://github.com/msoehl/openefb/releases/latest) page and download the installer for your platform:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+| Platform | File |
+|----------|------|
+| macOS    | `OpenEFB-x.x.x.dmg` |
+| Windows  | `OpenEFB-Setup-x.x.x.exe` |
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+> **macOS note:** The app is currently unsigned. On first launch, right-click the app and select **Open**.
+
+---
+
+## Setup
+
+1. **SimBrief** — Enter your SimBrief username in Settings and click *Save & Load OFP*.
+2. **Hoppie ACARS** — Register a free logon code at [hoppie.nl](https://www.hoppie.nl/acars/) and enter it in Settings.
+3. **Network** — Choose VATSIM or IVAO in Settings for live traffic and ATIS.
+
+---
+
+## Disclaimer
+
+OpenEFB is intended **for use with flight simulators only**. It is not certified for real-world aviation use.
+
+---
+
+## License
+
+[MIT](LICENSE) © 2025 Moritz Soehl

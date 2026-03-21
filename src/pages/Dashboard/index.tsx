@@ -1,11 +1,209 @@
+import { useState, useEffect } from 'react';
 import { useEFBStore } from '../../store/efbStore';
 import { fetchOFP } from '../../services/simbrief/api';
-import { formatTime, formatFuel } from '../../services/simbrief/api';
-import { Loader2, RefreshCw, AlertCircle, Plane, Clock, Fuel, Route } from 'lucide-react';
+import { formatTime, formatFuel, formatWeight } from '../../services/simbrief/api';
+import { fetchVatsimATIS, type ATISResult } from '../../services/atis/vatsim';
+import { fetchIvaoATIS } from '../../services/atis/ivao';
+import { Loader2, RefreshCw, AlertCircle, Plane, Clock, Route, ScrollText, Cloud, Radio, WifiOff } from 'lucide-react';
+import clsx from 'clsx';
+
+// ── OFP tab ───────────────────────────────────────────────────────────────────
+
+function cleanHtml(html: string): string {
+  return html
+    .replace(/<html[^>]*>/gi, '').replace(/<\/html>/gi, '')
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+    .replace(/<body[^>]*>/gi, '').replace(/<\/body>/gi, '');
+}
+
+function OFPTab() {
+  const { ofp } = useEFBStore();
+  if (!ofp) return null;
+  const html = ofp.text?.plan_html ? cleanHtml(ofp.text.plan_html) : null;
+  if (!html) return (
+    <div className="flex flex-col items-center justify-center h-full text-gray-500">
+      <ScrollText size={36} className="mb-3" />
+      <p className="text-sm">No OFP available in this flight plan.</p>
+    </div>
+  );
+  return (
+    <div className="overflow-auto flex-1 p-5">
+      <div className="ofp-html" dangerouslySetInnerHTML={{ __html: html }} />
+    </div>
+  );
+}
+
+// ── Weather tab ───────────────────────────────────────────────────────────────
+
+function formatTaf(taf: string): { tag: string; tagColor: string; content: string }[] {
+  if (!taf || typeof taf !== 'string') return [];
+  const parts = taf.split(/(?=\b(?:FM|TEMPO|BECMG|PROB\d{2})\b)/);
+  return parts.map((part) => {
+    const trimmed = part.trim();
+    const tagMatch = trimmed.match(/^(FM\d{6}|TEMPO|BECMG|PROB\d{2})/);
+    if (!tagMatch) return { tag: 'BASE', tagColor: 'text-gray-400', content: trimmed };
+    const tag = tagMatch[1];
+    const content = trimmed.slice(tag.length).trim();
+    const tagColor = tag.startsWith('FM') ? 'text-blue-400'
+      : tag === 'TEMPO' ? 'text-amber-400'
+      : tag === 'BECMG' ? 'text-green-400'
+      : 'text-purple-400';
+    return { tag, tagColor, content };
+  }).filter(p => p.content.length > 0);
+}
+
+function WeatherCard({ icao, label, metar, taf }: { icao: string; label: string; metar: string; taf: string }) {
+  const tafBlocks = formatTaf(taf);
+  return (
+    <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="font-mono font-bold text-white text-lg">{icao}</span>
+        <span className="text-xs text-gray-500 uppercase tracking-wider bg-[var(--c-depth)] px-2 py-0.5 rounded">{label}</span>
+      </div>
+      <div className="mb-3">
+        <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">METAR</div>
+        <div className="font-mono text-xs text-green-300 bg-[var(--c-depth)] rounded p-2.5 leading-relaxed">
+          {typeof metar === 'string' && metar ? metar : 'Not available'}
+        </div>
+      </div>
+      {tafBlocks.length > 0 && (
+        <div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">TAF</div>
+          <div className="bg-[var(--c-depth)] rounded p-2.5 space-y-1.5">
+            {tafBlocks.map((block, i) => (
+              <div key={i} className="flex gap-2 font-mono text-xs leading-relaxed">
+                <span className={`shrink-0 font-semibold ${block.tagColor} w-16`}>{block.tag}</span>
+                <span className="text-blue-100 opacity-80">{block.content}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AtisCard({ icao, result, loading, network }: { icao: string; result: ATISResult | null; loading: boolean; network: 'vatsim' | 'ivao' }) {
+  const networkLabel = network === 'ivao' ? 'IVAO' : 'VATSIM';
+  return (
+    <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Radio size={14} className="text-gray-500" />
+          <span className="text-sm font-medium text-white">{icao} — {networkLabel} ATIS</span>
+        </div>
+        {loading ? (
+          <Loader2 size={14} className="animate-spin text-gray-500" />
+        ) : result ? (
+          <div className="flex items-center gap-2">
+            {result.code && <span className="font-mono font-bold text-xl text-amber-400">{result.code}</span>}
+            <span className="text-xs text-green-400 bg-green-400/10 border border-green-400/20 px-2 py-0.5 rounded">ONLINE</span>
+            <span className="text-xs text-gray-500 font-mono">{result.frequency} MHz</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <WifiOff size={12} /> Not online
+          </div>
+        )}
+      </div>
+      {result && result.lines.length > 0 && (
+        <div className="font-mono text-xs text-gray-300 bg-[var(--c-depth)] rounded p-2.5 leading-relaxed">
+          {result.lines.join(' ')}
+        </div>
+      )}
+      {!loading && !result && (
+        <div className="text-xs text-gray-600 italic">No ATIS found on {networkLabel} for {icao}.</div>
+      )}
+    </div>
+  );
+}
+
+function WeatherTab() {
+  const { ofp, atisNetwork } = useEFBStore();
+  const [atisData, setAtisData] = useState<Record<string, ATISResult | null>>({});
+  const [atisLoading, setAtisLoading] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [countdown, setCountdown] = useState(300);
+
+  const airports = ofp ? [
+    { icao: ofp.origin.icao_code, label: 'Origin', metar: ofp.weather.orig_metar, taf: ofp.weather.orig_taf },
+    { icao: ofp.destination.icao_code, label: 'Destination', metar: ofp.weather.dest_metar, taf: ofp.weather.dest_taf },
+    ...(ofp.alternate?.icao_code
+      ? [{ icao: ofp.alternate.icao_code, label: 'Alternate', metar: ofp.weather.altn_metar, taf: ofp.weather.altn_taf }]
+      : []),
+  ] : [];
+
+  useEffect(() => {
+    if (airports.length === 0) return;
+    setCountdown(300);
+    setAtisLoading(true);
+    const fetchFn = atisNetwork === 'ivao' ? fetchIvaoATIS : fetchVatsimATIS;
+    Promise.all(
+      airports.map(async ({ icao }) => {
+        const result = await fetchFn(icao).catch(() => null);
+        return [icao, result] as [string, ATISResult | null];
+      })
+    ).then((results) => {
+      setAtisData(Object.fromEntries(results));
+    }).finally(() => setAtisLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ofp?.params?.request_id, atisNetwork, refreshTick]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          setRefreshTick(t => t + 1);
+          return 300;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  function manualRefresh() { setRefreshTick(t => t + 1); setCountdown(300); }
+
+  if (!ofp) return (
+    <div className="flex flex-col items-center justify-center h-full text-gray-500">
+      <Cloud size={40} className="mb-3" />
+      <p className="text-sm">No flight plan loaded.</p>
+    </div>
+  );
+
+  return (
+    <div className="p-5 overflow-auto flex-1 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-white">Weather</h2>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-500">SimBrief METAR/TAF · {atisNetwork === 'ivao' ? 'IVAO' : 'VATSIM'} ATIS</span>
+          <button
+            onClick={manualRefresh}
+            disabled={atisLoading}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white border border-[var(--c-border)] hover:border-[var(--c-border2)] px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {atisLoading
+              ? <Loader2 size={11} className="animate-spin" />
+              : <RefreshCw size={11} />}
+            <span className="font-mono text-[10px] text-gray-500">{atisLoading ? '…' : `${countdown}s`}</span>
+          </button>
+        </div>
+      </div>
+      {airports.map(({ icao, label, metar, taf }) => (
+        <div key={icao} className="space-y-2">
+          <WeatherCard icao={icao} label={label} metar={metar} taf={taf} />
+          <AtisCard icao={icao} result={atisData[icao] ?? null} loading={atisLoading} network={atisNetwork} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Stat card ─────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-[#111827] border border-[#1f2937] rounded-lg p-4">
+    <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-4">
       <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</div>
       <div className="text-xl font-mono font-semibold text-white">{value}</div>
       {sub && <div className="text-xs text-gray-500 mt-0.5">{sub}</div>}
@@ -16,8 +214,31 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
 export default function Dashboard() {
   const {
     ofp, setOFP, isLoadingOFP, setIsLoadingOFP,
-    ofpError, setOFPError, simbriefUsername, setActivePage
+    ofpError, setOFPError, simbriefUsername, setActivePage, clearAcarsMessages, setCpdlcStation,
   } = useEFBStore();
+  const [tab, setTab] = useState<'overview' | 'ofp' | 'weather'>('overview');
+
+  // First-run onboarding: no username set yet
+  if (!simbriefUsername) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-5">
+        <div className="text-center">
+          <Plane size={48} className="text-blue-600 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-white mb-2">Welcome to OpenEFB</h2>
+          <p className="text-gray-400 text-sm max-w-sm">
+            To get started, enter your SimBrief username in Settings.
+            Your flight plans will then be available here.
+          </p>
+        </div>
+        <button
+          onClick={() => setActivePage('settings')}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors text-sm"
+        >
+          Open Settings
+        </button>
+      </div>
+    );
+  }
 
   async function loadOFP() {
     if (!simbriefUsername) {
@@ -29,6 +250,8 @@ export default function Dashboard() {
     try {
       const data = await fetchOFP(simbriefUsername);
       setOFP(data);
+      clearAcarsMessages();
+      setCpdlcStation('');
     } catch (e) {
       setOFPError(e instanceof Error ? e.message : 'Failed to load flight plan.');
     } finally {
@@ -66,13 +289,55 @@ export default function Dashboard() {
     );
   }
 
-  const { general, origin, destination, times, fuel, aircraft, weights, atc } = ofp;
-  const units = general.units;
+  const { general, origin, destination, alternate, times, fuel, aircraft, weights, atc, params } = ofp;
+
+  function fmtUtc(unix: string): string {
+    const ts = parseInt(unix);
+    if (isNaN(ts) || ts === 0) return '—';
+    const d = new Date(ts * 1000);
+    return d.getUTCHours().toString().padStart(2, '0') + ':' +
+           d.getUTCMinutes().toString().padStart(2, '0') + 'Z';
+  }
+  const units = typeof general.units === 'string' ? general.units : 'kgs';
+
+  function parseWind(metar: string): { dir: number | null; spd: number; gust: number | null; vrb: boolean } | null {
+    if (!metar || typeof metar !== 'string') return null;
+    const m = metar.match(/\b(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT\b/);
+    if (!m) return null;
+    return { vrb: m[1] === 'VRB', dir: m[1] === 'VRB' ? null : parseInt(m[1]), spd: parseInt(m[2]), gust: m[3] ? parseInt(m[3]) : null };
+  }
+
+  const ofpAgeHours = (() => {
+    const ts = parseInt(params.time_generated);
+    if (isNaN(ts) || ts === 0) return 0;
+    return (Date.now() / 1000 - ts) / 3600;
+  })();
 
   return (
-    <div className="p-5 overflow-auto h-full">
+    <div className="flex flex-col h-full">
+      {/* Tab bar */}
+      <div className="flex border-b border-[var(--c-border)] shrink-0">
+        {([['overview', 'Overview'], ['ofp', 'OFP'], ['weather', 'Weather']] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={clsx(
+              'px-5 py-2.5 text-xs font-medium transition-colors border-b-2 -mb-px',
+              tab === id ? 'text-white border-blue-500' : 'text-gray-500 border-transparent hover:text-gray-300'
+            )}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* OFP tab */}
+      {tab === 'ofp' && <OFPTab />}
+
+      {/* Weather tab */}
+      {tab === 'weather' && <WeatherTab />}
+
+      {/* Overview tab */}
+      {tab === 'overview' && <div className="p-4 overflow-auto flex-1">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-3">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <span className="text-2xl font-bold text-white font-mono">
@@ -89,23 +354,27 @@ export default function Dashboard() {
         <button
           onClick={loadOFP}
           disabled={isLoadingOFP}
-          className="flex items-center gap-2 text-sm text-gray-400 hover:text-white border border-[#1f2937] hover:border-gray-600 px-3 py-1.5 rounded-lg transition-colors"
+          className={`flex items-center gap-2 text-sm border px-3 py-1.5 rounded-lg transition-colors ${
+            ofpAgeHours > 2
+              ? 'text-amber-400 border-amber-400/30 hover:border-amber-400/60'
+              : 'text-gray-400 hover:text-white border-[var(--c-border)] hover:border-[var(--c-border2)]'
+          }`}
         >
           {isLoadingOFP ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          Refresh
+          {ofpAgeHours > 2 ? `${Math.floor(ofpAgeHours)}h old` : 'Refresh'}
         </button>
       </div>
 
       {/* Route */}
-      <div className="bg-[#111827] border border-[#1f2937] rounded-lg p-3 mb-4 font-mono text-xs text-gray-300 leading-relaxed">
+      <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-3 mb-3 font-mono text-xs text-gray-300 leading-relaxed">
         <div className="text-gray-500 text-[10px] uppercase tracking-wider mb-1 flex items-center gap-1">
           <Route size={10} /> Route
         </div>
-        {general.route}
+        {typeof general.route === 'string' ? general.route : '—'}
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-4 gap-2 mb-3">
         <StatCard
           label="Block Fuel"
           value={formatFuel(fuel.plan_ramp, units)}
@@ -117,67 +386,129 @@ export default function Dashboard() {
           sub={`Block: ${formatTime(times.est_block)}`}
         />
         <StatCard
-          label="Est ZFW"
-          value={`${(parseInt(weights.est_zfw) / 1000).toFixed(1)}T`}
-          sub={`Max: ${(parseInt(weights.max_zfw) / 1000).toFixed(1)}T`}
-        />
-        <StatCard
           label="Init FL"
           value={`FL${(parseInt(general.initial_altitude) / 100).toFixed(0)}`}
-          sub={`Plan: FL${(parseInt(general.planned_altitude) / 100).toFixed(0)}`}
+          sub={(() => {
+            const pa = parseInt(general.planned_altitude);
+            return isNaN(pa) ? '—' : `Plan: FL${(pa / 100).toFixed(0)}`;
+          })()}
+        />
+        <StatCard
+          label="Est TOW"
+          value={formatWeight(weights.est_tow, units)}
+          sub={`ZFW: ${formatWeight(weights.est_zfw, units)}`}
         />
       </div>
 
-      {/* Airports */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Weights sub-row */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
         {[
-          { label: 'ORIGIN', airport: origin },
-          { label: 'DESTINATION', airport: destination },
-        ].map(({ label, airport }) => (
-          <div key={label} className="bg-[#111827] border border-[#1f2937] rounded-lg p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">{label}</div>
-            <div className="flex items-baseline gap-2 mb-1">
-              <span className="text-2xl font-bold font-mono text-white">{airport.icao_code}</span>
-              <span className="text-sm text-gray-400">{airport.iata_code}</span>
-            </div>
-            <div className="text-sm text-gray-300 mb-3">{airport.name}</div>
-            {airport.metar && (
-              <div className="font-mono text-xs text-gray-400 bg-[#0d1117] rounded p-2 leading-relaxed">
-                {airport.metar}
-              </div>
-            )}
-            <div className="flex gap-4 mt-2 text-xs text-gray-500">
-              <span>RWY {airport.runway || '—'}</span>
-              <span>ELEV {airport.elevation}ft</span>
-              <span className="flex items-center gap-1">
-                <Clock size={10} />
-                {airport.est_time_utc ? airport.est_time_utc.slice(-4).replace(/(\d{2})(\d{2})/, '$1:$2') + 'Z' : '—'}
-              </span>
-            </div>
+          { label: 'Taxi', value: fuel.taxi },
+          { label: 'Reserve', value: fuel.reserve },
+          { label: 'Extra', value: fuel.extra },
+        ].map(({ label, value }) => (
+          <div key={label} className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg px-3 py-2 flex items-center justify-between">
+            <span className="text-xs text-gray-500">{label}</span>
+            <span className="font-mono text-sm text-white">{formatFuel(value, units)}</span>
           </div>
         ))}
       </div>
 
-      {/* Fuel breakdown */}
-      <div className="mt-4 bg-[#111827] border border-[#1f2937] rounded-lg p-4">
-        <div className="text-xs text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1">
-          <Fuel size={10} /> Fuel Breakdown
-        </div>
-        <div className="grid grid-cols-5 gap-4 text-sm">
-          {[
-            { label: 'Taxi', value: fuel.taxi },
-            { label: 'Trip', value: fuel.enroute_burn },
-            { label: 'Reserve', value: fuel.reserve },
-            { label: 'Alternate', value: fuel.alternate_burn },
-            { label: 'Extra', value: fuel.extra },
-          ].map(({ label, value }) => (
-            <div key={label} className="text-center">
-              <div className="text-gray-500 text-xs mb-1">{label}</div>
-              <div className="font-mono text-white">{formatFuel(value, units)}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Airports */}
+      {/* METAR/TAF detail → Weather tab */}
+      {(() => {
+        const entries = [
+          { label: 'ORIGIN', airport: origin, time: fmtUtc(times.est_off), timeLabel: 'ETD' },
+          { label: 'DESTINATION', airport: destination, time: fmtUtc(times.est_on), timeLabel: 'ETA' },
+          ...(alternate?.icao_code && typeof alternate.icao_code === 'string'
+            ? [{ label: 'ALTERNATE', airport: alternate, time: fmtUtc(alternate.est_time_utc), timeLabel: 'ETA' }]
+            : []),
+        ];
+        return (
+          <div className={`grid gap-2 ${entries.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            {entries.map(({ label, airport, time, timeLabel }) => {
+              const wind = parseWind(airport.metar);
+              return (
+                <div key={label} className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-3">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">{label}</div>
+                  <div className="flex items-baseline gap-2 mb-0.5">
+                    <span className="text-xl font-bold font-mono text-white">{airport.icao_code}</span>
+                    <span className="text-xs text-gray-400">{airport.iata_code}</span>
+                  </div>
+                  <div className="text-xs text-gray-400 mb-2 truncate">{airport.name}</div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Clock size={10} />
+                      <span className="text-gray-600">{timeLabel}</span>
+                      <span className="text-gray-300">{time}</span>
+                    </span>
+                    <span>RWY {(typeof airport.plan_rwy === 'string' && airport.plan_rwy) ? airport.plan_rwy : '—'}</span>
+                    {wind && (
+                      <span className="font-mono">
+                        {wind.vrb ? 'VRB' : `${String(wind.dir).padStart(3, '0')}°`}{' '}{wind.spd}kt
+                        {wind.gust ? <span className="text-amber-400"> G{wind.gust}</span> : null}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* SID / STAR */}
+      {(() => {
+        const fixes = ofp.navlog?.fix ?? [];
+        // Procedure name heuristic: letters followed by digit + optional letter (e.g. DEGES2N, TENLO3A)
+        const isProcedure = (t: string) => /^[A-Z]{2,6}\d[A-Z]?$/.test(t);
+        const routeTokens = typeof general.route === 'string' ? general.route.trim().split(/\s+/) : [];
+        const sid  = routeTokens.length > 0 && isProcedure(routeTokens[0])  ? routeTokens[0]  : null;
+        const star = routeTokens.length > 1 && isProcedure(routeTokens[routeTokens.length - 1]) ? routeTokens[routeTokens.length - 1] : null;
+        if (!sid && !star) return null;
+
+        // Find navlog waypoints belonging to SID (first fixes until type changes) and STAR (last fixes)
+        const nonApt = fixes.filter(f => f.type !== 'apt' && f.type !== 'airport');
+        const sidFixes  = nonApt.slice(0, 6).map(f => f.ident);
+        const starFixes = nonApt.slice(-6).map(f => f.ident);
+
+        return (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {sid && (
+              <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-3">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">
+                  SID · RWY {origin.plan_rwy || '—'}
+                </div>
+                <div className="font-mono text-sm font-bold text-blue-400 mb-1.5">{sid}</div>
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                  {sidFixes.map((id, i) => (
+                    <span key={i} className="text-[10px] font-mono text-gray-400">
+                      {id}{i < sidFixes.length - 1 ? ' →' : ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {star && (
+              <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-3">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">
+                  STAR · RWY {destination.plan_rwy || '—'}
+                </div>
+                <div className="font-mono text-sm font-bold text-green-400 mb-1.5">{star}</div>
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                  {starFixes.map((id, i) => (
+                    <span key={i} className="text-[10px] font-mono text-gray-400">
+                      {i === 0 ? '' : '→ '}{id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      </div>}
     </div>
   );
 }

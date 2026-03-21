@@ -144,7 +144,7 @@ export interface Airport {
   translvl: string;
   est_time_utc: string;
   sched_time_utc: string;
-  runway: string;
+  plan_rwy: string;
 }
 
 export interface NavlogFix {

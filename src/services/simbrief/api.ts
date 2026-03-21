@@ -21,18 +21,20 @@ export async function fetchOFPById(pilotId: string): Promise<SimbriefOFP> {
   return response.data;
 }
 
-export function formatWeight(value: string, units: string): string {
-  const num = parseInt(value, 10);
-  if (isNaN(num)) return value;
-  if (units === 'kgs') return `${(num / 1000).toFixed(1)}T`;
-  return `${(num / 1000).toFixed(1)}K lbs`;
+function isKgs(units: unknown): boolean {
+  return typeof units !== 'string' || units !== 'lbs';
 }
 
-export function formatFuel(value: string, units: string): string {
+export function formatWeight(value: string, units: unknown): string {
   const num = parseInt(value, 10);
-  if (isNaN(num)) return value;
-  if (units === 'kgs') return `${num.toLocaleString()} KG`;
-  return `${num.toLocaleString()} LBS`;
+  if (isNaN(num)) return '—';
+  return isKgs(units) ? `${(num / 1000).toFixed(1)}T` : `${(num / 1000).toFixed(1)}K lbs`;
+}
+
+export function formatFuel(value: string, units: unknown): string {
+  const num = parseInt(value, 10);
+  if (isNaN(num)) return '—';
+  return isKgs(units) ? `${num.toLocaleString()} KG` : `${num.toLocaleString()} LBS`;
 }
 
 export function formatTime(seconds: string): string {

@@ -1,136 +1,150 @@
 import { useState } from 'react';
 import { useEFBStore } from '../../store/efbStore';
-import { Map, ExternalLink, Info } from 'lucide-react';
+import { Map, ExternalLink } from 'lucide-react';
 
-const CHART_SOURCES = [
+function openUrl(url: string) {
+  if (typeof window !== 'undefined' && window.electronAPI?.openExternal) {
+    window.electronAPI.openExternal(url);
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}
+
+interface Provider {
+  name: string;
+  description: string;
+  cost: string;
+  costColor: string;
+  coverage: string;
+  url: (icao: string) => string;
+}
+
+const PROVIDERS: Provider[] = [
   {
-    id: 'navigraph',
+    name: 'ChartFox',
+    description: 'Community-driven chart portal. Covers most major airports worldwide. VATSIM-integrated.',
+    cost: 'Free',
+    costColor: 'text-green-400',
+    coverage: 'Global',
+    url: (icao) => `https://chartfox.org/${icao}`,
+  },
+  {
     name: 'Navigraph Charts',
-    url: 'https://charts.navigraph.com',
-    description: 'Professional aviation charts (subscription required)',
-    external: true,
-  },
-  {
-    id: 'openaip',
-    name: 'OpenAIP',
-    url: (icao: string) => `https://www.openaip.net/airports/${icao}`,
-    description: 'Free community-maintained charts',
-    external: true,
-  },
-  {
-    id: 'skyvector',
-    name: 'SkyVector',
-    url: (icao: string) => `https://skyvector.com/airport/${icao}`,
-    description: 'Free aeronautical charts',
-    external: true,
+    description: 'Professional Jeppesen charts for every airport. Requires Navigraph Charts or Ultimate subscription.',
+    cost: 'Subscription',
+    costColor: 'text-amber-400',
+    coverage: 'Global',
+    url: (icao) => `https://charts.navigraph.com/airport/${icao}?section=Charts`,
   },
 ];
 
 export default function Charts() {
   const { ofp } = useEFBStore();
   const [icaoInput, setIcaoInput] = useState('');
-  const [selectedIcao, setSelectedIcao] = useState('');
+  const [selectedIcao, setSelectedIcao] = useState(
+    ofp?.origin?.icao_code ?? ''
+  );
 
-  const suggestedAirports = ofp
+  const airports = ofp
     ? [
         { icao: ofp.origin.icao_code, label: 'Origin' },
-        { icao: ofp.destination.icao_code, label: 'Destination' },
-        ...(ofp.alternate?.icao_code
-          ? [{ icao: ofp.alternate.icao_code, label: 'Alternate' }]
-          : []),
+        { icao: ofp.destination.icao_code, label: 'Dest' },
+        ...(ofp.alternate?.icao_code ? [{ icao: ofp.alternate.icao_code, label: 'Altn' }] : []),
       ]
     : [];
 
-  function handleSearch(e: React.FormEvent) {
+  function handleSearch(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (icaoInput.trim().length >= 3) {
-      setSelectedIcao(icaoInput.trim().toUpperCase());
-    }
+    const icao = icaoInput.trim().toUpperCase();
+    if (icao.length >= 3) setSelectedIcao(icao);
   }
 
   return (
-    <div className="flex flex-col h-full p-5 gap-5 overflow-auto">
-      {/* Search */}
-      <div>
-        <h2 className="text-base font-semibold text-white mb-3">Airport Charts</h2>
+    <div className="p-5 overflow-auto h-full space-y-5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Map size={16} className="text-gray-400" />
+          <h2 className="text-base font-semibold text-white">Charts</h2>
+        </div>
+        <span className="text-xs text-gray-600">Opens in external browser</span>
+      </div>
+
+      {/* Airport selector */}
+      <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-4 space-y-3">
+        <div className="text-xs text-gray-500 uppercase tracking-wider">Airport</div>
         <form onSubmit={handleSearch} className="flex gap-2">
           <input
             type="text"
             value={icaoInput}
             onChange={(e) => setIcaoInput(e.target.value.toUpperCase())}
-            placeholder="ICAO Code (e.g. EDDF)"
+            placeholder="ICAO eingeben…"
             maxLength={4}
-            className="bg-[#111827] border border-[#1f2937] text-white rounded-lg px-3 py-2 text-sm font-mono w-40 focus:outline-none focus:border-blue-500"
+            className="flex-1 bg-[var(--c-depth)] border border-[var(--c-border)] focus:border-blue-500 text-white rounded-lg px-3 py-2 text-sm font-mono focus:outline-none"
           />
           <button
             type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
           >
-            Search
+            Set
           </button>
         </form>
-      </div>
 
-      {/* Flight plan airports */}
-      {suggestedAirports.length > 0 && (
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">From Flight Plan</div>
-          <div className="flex gap-2">
-            {suggestedAirports.map(({ icao, label }) => (
+        {airports.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {airports.map(({ icao, label }) => (
               <button
                 key={icao}
-                onClick={() => { setSelectedIcao(icao); setIcaoInput(icao); }}
-                className={`px-3 py-2 rounded-lg border text-sm transition-colors ${
+                onClick={() => setSelectedIcao(icao)}
+                className={`px-3 py-1 rounded text-xs font-mono transition-colors ${
                   selectedIcao === icao
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'bg-[#111827] border-[#1f2937] text-gray-300 hover:border-gray-600'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-[var(--c-depth)] border border-[var(--c-border)] text-gray-400 hover:border-[var(--c-border2)]'
                 }`}
               >
-                <span className="font-mono font-bold">{icao}</span>
-                <span className="text-xs text-gray-400 ml-2">{label}</span>
+                {icao}
+                <span className="ml-1 opacity-50">{label}</span>
               </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Chart sources */}
-      {selectedIcao ? (
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">
-            Charts for <span className="text-white font-mono">{selectedIcao}</span>
+        {selectedIcao && (
+          <div className="text-xs text-gray-500">
+            Charts werden geöffnet für: <span className="font-mono text-white">{selectedIcao}</span>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            {CHART_SOURCES.map((source) => {
-              const url = typeof source.url === 'function' ? source.url(selectedIcao) : source.url;
-              return (
-                <a
-                  key={source.id}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-[#111827] border border-[#1f2937] hover:border-blue-500 rounded-lg p-4 flex flex-col gap-2 transition-colors group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-white text-sm">{source.name}</span>
-                    <ExternalLink size={14} className="text-gray-500 group-hover:text-blue-400" />
-                  </div>
-                  <p className="text-xs text-gray-500">{source.description}</p>
-                </a>
-              );
-            })}
+        )}
+      </div>
+
+      {/* Provider cards */}
+      <div className="grid grid-cols-2 gap-3">
+        {PROVIDERS.map((p) => (
+          <div
+            key={p.name}
+            className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-4 flex flex-col gap-3 hover:border-[#2a3a55] transition-colors"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold text-white">{p.name}</div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className={`text-xs font-medium ${p.costColor}`}>{p.cost}</span>
+                  <span className="text-gray-600 text-xs">·</span>
+                  <span className="text-xs text-gray-500">{p.coverage}</span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-400 leading-relaxed flex-1">{p.description}</p>
+
+            <button
+              onClick={() => openUrl(p.url(selectedIcao || 'EDDF'))}
+              className="flex items-center justify-center gap-1.5 w-full py-2 bg-[var(--c-depth)] hover:bg-[#1a2535] border border-[var(--c-border)] hover:border-blue-500/50 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors"
+            >
+              <ExternalLink size={11} />
+              {selectedIcao ? `${p.name} · ${selectedIcao}` : `${p.name} öffnen`}
+            </button>
           </div>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center flex-1 text-gray-600">
-          <Map size={40} className="mb-3" />
-          <p className="text-sm">Enter an ICAO code or select an airport from your flight plan</p>
-          <div className="flex items-center gap-1.5 mt-4 text-xs text-gray-600 bg-[#111827] border border-[#1f2937] rounded-lg px-3 py-2 max-w-sm text-center">
-            <Info size={12} className="shrink-0" />
-            Full chart integration (Navigraph/Jeppesen) coming soon. External links available now.
-          </div>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,47 @@
+import { useEffect, useRef } from 'react';
+import { useEFBStore } from '../store/efbStore';
+import { hoppiePoll, hoppiePing } from '../services/hoppie';
+
+const POLL_INTERVAL = 30_000;
+
+export function useAcarsPolling() {
+  const { hoppieLogon, ofp } = useEFBStore();
+  const callsign = ofp?.atc?.callsign ?? '';
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (!hoppieLogon || !callsign) return;
+
+    const { setHoppieConnected } = useEFBStore.getState();
+    hoppiePing(hoppieLogon, callsign)
+      .then(ok => setHoppieConnected(ok))
+      .catch(() => setHoppieConnected(false));
+
+    async function doPoll() {
+      const s = useEFBStore.getState();
+      const cs = s.ofp?.atc?.callsign ?? '';
+      if (!s.hoppieLogon || !cs) return;
+      s.setHoppiePolling(true);
+      try {
+        const msgs = await hoppiePoll(s.hoppieLogon, cs);
+        if (msgs.length > 0) {
+          const fresh = useEFBStore.getState();
+          msgs.forEach(m => fresh.addAcarsMessage(m));
+          if (useEFBStore.getState().activePage !== 'acars') {
+            useEFBStore.getState().incrementAcarsUnread();
+          }
+        }
+        useEFBStore.getState().setHoppieError(null);
+      } catch {
+        useEFBStore.getState().setHoppieError('Poll failed');
+      } finally {
+        useEFBStore.getState().setHoppiePolling(false);
+      }
+    }
+
+    doPoll();
+    intervalRef.current = setInterval(doPoll, POLL_INTERVAL);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [hoppieLogon, callsign]);
+}

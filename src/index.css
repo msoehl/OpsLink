@@ -1,12 +1,46 @@
+@import 'leaflet/dist/leaflet.css';
 @import "tailwindcss";
+
+:root {
+  --c-base:    #0a0e1a;
+  --c-depth:   #0d1117;
+  --c-surface: #111827;
+  --c-border:  #1f2937;
+  --c-border2: #374151;
+  --c-text:    #f1f5f9;
+  --c-text2:   #d1d5db;
+  --c-text3:   #9ca3af;
+  --c-text4:   #6b7280;
+  --c-text5:   #4b5563;
+}
+
+[data-theme="light"] {
+  --c-base:    #f0f4f8;
+  --c-depth:   #e2e8f0;
+  --c-surface: #ffffff;
+  --c-border:  #cbd5e1;
+  --c-border2: #94a3b8;
+  --c-text:    #0f172a;
+  --c-text2:   #1e293b;
+  --c-text3:   #475569;
+  --c-text4:   #64748b;
+  --c-text5:   #94a3b8;
+}
 
 * {
   box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 body {
-  background-color: #0a0e1a;
-  color: #f1f5f9;
+  background-color: var(--c-base);
+  color: var(--c-text);
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
   margin: 0;
   overflow: hidden;
@@ -25,9 +59,90 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #111827;
+  background: var(--c-surface);
 }
 ::-webkit-scrollbar-thumb {
-  background: #374151;
+  background: var(--c-border2);
   border-radius: 3px;
 }
+
+/* Leaflet — theme-aware */
+.leaflet-container {
+  background: var(--c-base) !important;
+}
+.leaflet-control-zoom a {
+  background: var(--c-surface) !important;
+  color: var(--c-text3) !important;
+  border-color: var(--c-border) !important;
+}
+.leaflet-control-zoom a:hover {
+  background: var(--c-border) !important;
+  color: var(--c-text) !important;
+}
+.leaflet-control-attribution {
+  background: rgba(0,0,0,0.4) !important;
+  color: var(--c-text5) !important;
+}
+.leaflet-control-attribution a {
+  color: var(--c-text4) !important;
+}
+.leaflet-popup-content-wrapper {
+  background: var(--c-surface) !important;
+  color: var(--c-text) !important;
+  border: 1px solid var(--c-border);
+}
+.leaflet-popup-tip {
+  background: var(--c-surface) !important;
+}
+.leaflet-tooltip {
+  background: var(--c-surface) !important;
+  border-color: var(--c-border) !important;
+  color: var(--c-text) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+}
+.leaflet-tooltip-top::before    { border-top-color:    var(--c-border) !important; }
+.leaflet-tooltip-bottom::before { border-bottom-color: var(--c-border) !important; }
+.leaflet-tooltip-left::before   { border-left-color:   var(--c-border) !important; }
+.leaflet-tooltip-right::before  { border-right-color:  var(--c-border) !important; }
+
+/* Light mode text overrides — Tailwind utilities don't respond to theme automatically */
+[data-theme="light"] .text-white          { color: var(--c-text)  !important; }
+[data-theme="light"] .text-gray-100       { color: var(--c-text)  !important; }
+[data-theme="light"] .text-gray-200       { color: var(--c-text2) !important; }
+[data-theme="light"] .text-gray-300       { color: var(--c-text2) !important; }
+[data-theme="light"] .text-gray-400       { color: var(--c-text3) !important; }
+[data-theme="light"] .text-gray-500       { color: var(--c-text4) !important; }
+[data-theme="light"] .text-gray-600       { color: var(--c-text5) !important; }
+[data-theme="light"] .text-gray-700       { color: var(--c-text5) !important; }
+[data-theme="light"] .text-green-300      { color: #166534         !important; }
+[data-theme="light"] .text-blue-300       { color: #1d4ed8         !important; }
+[data-theme="light"] .text-blue-100       { color: #1e40af         !important; }
+[data-theme="light"] .text-blue-400       { color: #1d4ed8         !important; }
+[data-theme="light"] .text-amber-400      { color: #92400e         !important; }
+[data-theme="light"] .text-green-400      { color: #166534         !important; }
+[data-theme="light"] .text-red-400        { color: #991b1b         !important; }
+[data-theme="light"] .placeholder\:text-gray-500::placeholder { color: var(--c-text4) !important; }
+
+/* Light mode input backgrounds */
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="password"],
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  color: var(--c-text) !important;
+}
+
+/* OFP HTML content styling */
+.ofp-html {
+  color: var(--c-text2);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ofp-html table { border-collapse: collapse; width: 100%; }
+.ofp-html td, .ofp-html th { padding: 1px 6px; }
+.ofp-html b, .ofp-html strong { color: #60a5fa; }
+.ofp-html hr { border-color: var(--c-border); margin: 8px 0; }
+.ofp-html [bgcolor] { background-color: transparent !important; }
+.ofp-html font[color] { color: inherit !important; }

@@ -1,36 +1,97 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useEFBStore } from '../../store/efbStore';
 import { fetchOFP } from '../../services/simbrief/api';
-import { Loader2, CheckCircle, AlertCircle, Settings } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle, Settings, RefreshCw, Download, Zap } from 'lucide-react';
+
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'error' | 'progress' | 'downloaded';
+
+function UpdateSection() {
+  const [status, setStatus] = useState<UpdateStatus>('idle');
+  const [info, setInfo]     = useState<string>('');
+
+  useEffect(() => {
+    const cleanup = window.electronAPI?.onUpdateStatus?.(({ status: s, info: i }) => {
+      setStatus(s as UpdateStatus);
+      if (s === 'available')     setInfo(`v${(i as { version: string })?.version ?? ''} available`);
+      else if (s === 'progress') setInfo(`${i}%`);
+      else if (s === 'error')    setInfo(String(i));
+      else if (s === 'downloaded') setInfo('Ready to install');
+      else setInfo('');
+    });
+    return () => { cleanup?.(); };
+  }, []);
+
+  return (
+    <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
+      <h3 className="text-sm font-semibold text-white mb-1">Updates</h3>
+      <p className="text-xs text-gray-500 mb-4">Check for new versions of OpenEFB.</p>
+      <div className="flex items-center gap-3 flex-wrap">
+        {status !== 'downloaded' ? (
+          <button
+            onClick={() => window.electronAPI?.checkForUpdates?.()}
+            disabled={status === 'checking' || status === 'progress'}
+            className="flex items-center gap-2 bg-[var(--c-depth)] border border-[var(--c-border)] hover:border-[var(--c-border2)] disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            {status === 'checking' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Check for Updates
+          </button>
+        ) : (
+          <button
+            onClick={() => window.electronAPI?.installUpdate?.()}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Zap size={14} /> Restart & Install
+          </button>
+        )}
+        {status === 'available' && (
+          <button
+            onClick={() => window.electronAPI?.downloadUpdate?.()}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Download size={14} /> Download
+          </button>
+        )}
+        {info && (
+          <span className={`text-xs font-mono ${status === 'error' ? 'text-red-400' : status === 'not-available' ? 'text-gray-500' : status === 'downloaded' ? 'text-green-400' : 'text-blue-400'}`}>
+            {status === 'not-available' ? 'Already up to date' : info}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const {
     simbriefUsername, setSimbriefUsername,
-    setOFP, setIsLoadingOFP, isLoadingOFP, ofpError, setOFPError,
-    setActivePage,
+    setOFP, setIsLoadingOFP, isLoadingOFP, ofpError, setOFPError, setActivePage, clearAcarsMessages, setCpdlcStation,
+    atisNetwork, setAtisNetwork,
+    hoppieLogon, setHoppieLogon,
   } = useEFBStore();
 
-  const [inputVal, setInputVal] = useState(simbriefUsername);
-  const [saved, setSaved] = useState(false);
+  const [simbriefInput, setSimbriefInput] = useState(simbriefUsername);
+  const [simbriefSaved, setSimbriefSaved] = useState(false);
+  const [hoppieInput, setHoppieInput] = useState(hoppieLogon);
+  const [hoppieSaved, setHoppieSaved] = useState(false);
 
-  async function handleSaveAndLoad() {
-    const trimmed = inputVal.trim();
+  async function handleSimbriefSave() {
+    const trimmed = simbriefInput.trim();
     setSimbriefUsername(trimmed);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-
-    if (trimmed) {
-      setIsLoadingOFP(true);
-      setOFPError(null);
-      try {
-        const data = await fetchOFP(trimmed);
-        setOFP(data);
-        setActivePage('dashboard');
-      } catch (e) {
-        setOFPError(e instanceof Error ? e.message : 'Failed to load OFP.');
-      } finally {
-        setIsLoadingOFP(false);
-      }
+    setSimbriefSaved(true);
+    setTimeout(() => setSimbriefSaved(false), 2000);
+    if (!trimmed) return;
+    setIsLoadingOFP(true);
+    setOFPError(null);
+    try {
+      const data = await fetchOFP(trimmed);
+      setOFP(data);
+      clearAcarsMessages();
+      setCpdlcStation('');
+      setActivePage('dashboard');
+    } catch (e) {
+      setOFPError(e instanceof Error ? e.message : 'Failed to load OFP.');
+    } finally {
+      setIsLoadingOFP(false);
     }
   }
 
@@ -41,62 +102,103 @@ export default function SettingsPage() {
         <h2 className="text-base font-semibold text-white">Settings</h2>
       </div>
 
-      <div className="max-w-lg space-y-6">
+      <div className="max-w-lg space-y-5">
         {/* SimBrief */}
-        <div className="bg-[#111827] border border-[#1f2937] rounded-lg p-5">
-          <h3 className="text-sm font-semibold text-white mb-1">SimBrief Integration</h3>
-          <p className="text-xs text-gray-500 mb-4">
-            Enter your SimBrief username or Pilot ID to load your flight plans.
-          </p>
-
+        <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
+          <h3 className="text-sm font-semibold text-white mb-1">SimBrief</h3>
+          <p className="text-xs text-gray-500 mb-4">Enter your SimBrief username to load flight plans.</p>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1.5">SimBrief Username</label>
+              <label className="block text-xs text-gray-400 mb-1.5">Username</label>
               <input
                 type="text"
-                value={inputVal}
-                onChange={(e) => setInputVal(e.target.value)}
+                value={simbriefInput}
+                onChange={(e) => setSimbriefInput(e.target.value)}
                 placeholder="e.g. JohnDoe123"
-                className="w-full bg-[#0d1117] border border-[#1f2937] focus:border-blue-500 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                className="w-full bg-[var(--c-depth)] border border-[var(--c-border)] focus:border-blue-500 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
               />
-              <p className="text-xs text-gray-600 mt-1">
-                Find your username at simbrief.com → My Briefings
-              </p>
             </div>
-
             {ofpError && (
               <div className="flex items-center gap-2 text-red-400 text-xs bg-red-400/10 px-3 py-2 rounded-lg border border-red-400/20">
-                <AlertCircle size={14} />
-                {ofpError}
+                <AlertCircle size={14} /> {ofpError}
               </div>
             )}
-
             <button
-              onClick={handleSaveAndLoad}
-              disabled={isLoadingOFP || !inputVal.trim()}
+              onClick={handleSimbriefSave}
+              disabled={isLoadingOFP || !simbriefInput.trim()}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
-              {isLoadingOFP ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : saved ? (
-                <CheckCircle size={14} />
-              ) : null}
-              {isLoadingOFP ? 'Loading OFP...' : saved ? 'Saved!' : 'Save & Load OFP'}
+              {isLoadingOFP ? <Loader2 size={14} className="animate-spin" /> : simbriefSaved ? <CheckCircle size={14} /> : null}
+              {isLoadingOFP ? 'Loading OFP...' : simbriefSaved ? 'Saved!' : 'Save & Load OFP'}
             </button>
           </div>
         </div>
 
+        {/* Hoppie ACARS */}
+        <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
+          <h3 className="text-sm font-semibold text-white mb-1">Hoppie ACARS</h3>
+          <p className="text-xs text-gray-500 mb-4">
+            Enter your Hoppie logon code to enable datalink messaging. Register at{' '}
+            <a href="https://www.hoppie.nl/acars/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">hoppie.nl</a>.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1.5">Logon Code</label>
+              <input
+                type="text"
+                value={hoppieInput}
+                onChange={(e) => setHoppieInput(e.target.value)}
+                placeholder="Your Hoppie logon code"
+                className="w-full bg-[var(--c-depth)] border border-[var(--c-border)] focus:border-blue-500 text-white rounded-lg px-3 py-2 text-sm font-mono focus:outline-none"
+              />
+            </div>
+            <button
+              onClick={() => {
+                setHoppieLogon(hoppieInput.trim());
+                setHoppieSaved(true);
+                setTimeout(() => setHoppieSaved(false), 2000);
+              }}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              {hoppieSaved ? <CheckCircle size={14} /> : null}
+              {hoppieSaved ? 'Saved!' : 'Save'}
+            </button>
+          </div>
+        </div>
+
+        {/* ATIS Network */}
+        <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
+          <h3 className="text-sm font-semibold text-white mb-1">ATIS Network</h3>
+          <p className="text-xs text-gray-500 mb-4">Select which network to fetch live ATIS from on the Weather page.</p>
+          <div className="flex gap-2">
+            {(['vatsim', 'ivao'] as const).map((net) => (
+              <button
+                key={net}
+                onClick={() => setAtisNetwork(net)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  atisNetwork === net
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-[var(--c-depth)] border border-[var(--c-border)] text-gray-400 hover:border-[var(--c-border2)]'
+                }`}
+              >
+                {net.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Updates */}
+        <UpdateSection />
+
         {/* About */}
-        <div className="bg-[#111827] border border-[#1f2937] rounded-lg p-5">
+        <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
           <h3 className="text-sm font-semibold text-white mb-1">About OpenEFB</h3>
           <p className="text-xs text-gray-500 leading-relaxed">
-            OpenEFB is an open-source Electronic Flight Bag designed for flight simulators,
-            inspired by Lufthansa Systems LIDO. It integrates with SimBrief for flight planning
-            and provides charts, weather, and performance data.
+            A free, open-source Electronic Flight Bag built for flight simulator enthusiasts.
+            Integrates SimBrief for flight planning, Hoppie ACARS for datalink messaging,
+            and live traffic via VATSIM and IVAO.
           </p>
-          <div className="mt-3 text-xs text-gray-600">
-            Version 0.1.0 · For simulator use only
-          </div>
+          <div className="mt-3 text-xs text-gray-600">Version 0.1.0 · For simulator use only</div>
         </div>
       </div>
     </div>
