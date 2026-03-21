@@ -2,7 +2,8 @@ import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import * as https from 'https';
-import { autoUpdater } from 'electron-updater';
+import pkg from 'electron-updater';
+const { autoUpdater } = pkg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
