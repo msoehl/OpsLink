@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useEFBStore } from '../../store/efbStore';
 import { fetchOFP } from '../../services/simbrief/api';
-import { Loader2, CheckCircle, AlertCircle, Settings, RefreshCw, Download, Zap } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle, Settings, RefreshCw, Zap } from 'lucide-react';
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'error' | 'progress' | 'downloaded';
 
@@ -41,14 +41,6 @@ function UpdateSection() {
             className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
             <Zap size={14} /> Restart & Install
-          </button>
-        )}
-        {status === 'available' && (
-          <button
-            onClick={() => window.electronAPI?.downloadUpdate?.()}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Download size={14} /> Download
           </button>
         )}
         {info && (

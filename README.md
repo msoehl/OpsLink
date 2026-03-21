@@ -30,14 +30,13 @@
 
 ## Download
 
-Head to the [**Releases**](https://github.com/msoehl/openefb/releases/latest) page and download the installer for your platform:
+<div align="center">
 
-| Platform | File |
-|----------|------|
-| macOS    | `OpenEFB-x.x.x.dmg` |
-| Windows  | `OpenEFB-Setup-x.x.x.exe` |
+[⬇️ Download for macOS](https://github.com/msoehl/openefb/releases/latest/download/OpenEFB.dmg) &nbsp;&nbsp; [⬇️ Download for Windows](https://github.com/msoehl/openefb/releases/latest/download/OpenEFB-Setup.exe)
 
-> **macOS note:** The app is currently unsigned. On first launch, right-click the app and select **Open**.
+</div>
+
+> **macOS:** The app is currently unsigned. On first launch, right-click → **Open**.
 
 ---
 

@@ -75,7 +75,7 @@ ipcMain.handle('fetch-avwx-metar', async (_event, icao: string) => {
 });
 
 function setupUpdater(win: BrowserWindow) {
-  autoUpdater.autoDownload = false;
+  autoUpdater.autoDownload = true;
 
   const send = (status: string, info?: unknown) =>
     win.webContents.send('update-status', { status, info });
@@ -87,13 +87,18 @@ function setupUpdater(win: BrowserWindow) {
   autoUpdater.on('download-progress',    (p)    => send('progress', Math.round(p.percent)));
   autoUpdater.on('update-downloaded',    (info) => send('downloaded', info));
 
+  // Check on startup, then every 4 hours
+  if (!isDev) {
+    autoUpdater.checkForUpdates();
+    setInterval(() => autoUpdater.checkForUpdates(), 4 * 60 * 60 * 1000);
+  }
+
   ipcMain.handle('check-for-updates', () => {
     if (isDev) { send('not-available'); return; }
     autoUpdater.checkForUpdates();
   });
 
-  ipcMain.handle('download-update', () => autoUpdater.downloadUpdate());
-  ipcMain.handle('install-update',  () => autoUpdater.quitAndInstall());
+  ipcMain.handle('install-update', () => autoUpdater.quitAndInstall());
 }
 
 app.whenReady().then(() => {
