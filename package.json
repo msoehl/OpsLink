@@ -27,9 +27,14 @@
       "dist-electron/**/*"
     ],
     "mac": {
-      "target": ["dmg", "zip"],
-      "category": "public.app-category.utilities",
-      "artifactName": "OpenEFB.dmg"
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "dmg": {
+      "artifactName": "OpenEFB-${arch}.dmg"
     },
     "win": {
       "target": "nsis",

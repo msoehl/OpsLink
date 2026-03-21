@@ -7,41 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create.outputs.upload_url }}
-    steps:
-      - name: Create GitHub Release
-        id: create
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: false
-          prerelease: false
-          body: |
-            ## Download OpenEFB ${{ github.ref_name }}
-
-            | Platform | File | Description |
-            |----------|------|-------------|
-            | 🍎 macOS | `OpenEFB.dmg` | Installer disk image |
-            | 🪟 Windows | `OpenEFB-Setup.exe` | Installer |
-
-            > **macOS note:** The app is currently unsigned. On first launch, right-click → **Open**.
-
-            ---
-
-            <details>
-            <summary>ℹ️ Other files (auto-updater only — you don't need these)</summary>
-
-            The remaining files (`*.yml`, `*.blockmap`, `*.zip`) are used internally by the auto-updater
-            to deliver silent background updates. You do **not** need to download them manually.
-
-            </details>
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build-mac:
-    needs: create-release
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +26,6 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
   build-windows:
-    needs: create-release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,3 +41,33 @@ jobs:
         run: npm run electron:release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-release-notes:
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update release notes
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ## Download OpenEFB ${{ github.ref_name }}
+
+            | Platform | File | Description |
+            |----------|------|-------------|
+            | 🍎 macOS (Apple Silicon) | `OpenEFB-arm64.dmg` | Für M1/M2/M3/M4 Macs |
+            | 🍎 macOS (Intel) | `OpenEFB-x64.dmg` | Für Intel Macs |
+            | 🪟 Windows | `OpenEFB-Setup.exe` | Windows Installer |
+
+            > **macOS Hinweis:** Die App ist nicht signiert. Beim ersten Start: Rechtsklick → **Öffnen**.
+
+            ---
+
+            <details>
+            <summary>ℹ️ Weitere Dateien (nur für Auto-Updater — nicht manuell herunterladen)</summary>
+
+            Die übrigen Dateien (`*.yml`, `*.blockmap`, `*.zip`) werden intern vom Auto-Updater verwendet,
+            um stille Hintergrund-Updates zu liefern. Diese müssen **nicht** manuell heruntergeladen werden.
+
+            </details>
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
