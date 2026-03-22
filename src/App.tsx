@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useEFBStore } from './store/efbStore';
 import { useAcarsPolling } from './hooks/useAcarsPolling';
+import { useSimPosition } from './hooks/useSimPosition';
+import { useFlightTracking } from './hooks/useFlightTracking';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
@@ -11,6 +13,7 @@ import Charts from './pages/Charts';
 import Performance from './pages/Performance';
 import AcarsPage from './pages/Acars';
 import SettingsPage from './pages/Settings';
+import LogbookPage from './pages/Logbook';
 
 function PageContent() {
   const { activePage } = useEFBStore();
@@ -22,6 +25,7 @@ function PageContent() {
     case 'performance': return <Performance />;
     case 'acars':       return <AcarsPage />;
     case 'settings':    return <SettingsPage />;
+    case 'logbook':     return <LogbookPage />;
     default:            return <Dashboard />;
   }
 }
@@ -31,6 +35,8 @@ export default function App() {
   const [offline, setOffline] = useState(!navigator.onLine);
 
   useAcarsPolling();
+  useSimPosition();
+  useFlightTracking();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);

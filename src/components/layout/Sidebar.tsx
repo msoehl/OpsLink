@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Settings,
   Plane,
+  BookOpen,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -16,8 +17,9 @@ const navItems: { id: EFBPage; label: string; short: string; icon: React.Element
   { id: 'dashboard',   label: 'Dashboard',   short: 'Dash',  icon: LayoutDashboard },
   { id: 'map',         label: 'Map',         short: 'Map',   icon: Globe },
   { id: 'performance', label: 'Performance', short: 'Perf',  icon: Gauge },
-  { id: 'charts',      label: 'Charts',      short: 'Chrt',  icon: Map },
+  { id: 'charts',      label: 'Charts',      short: 'Charts', icon: Map },
   { id: 'flightplan',  label: 'Flight Plan', short: 'F-PLN', icon: FileText },
+  { id: 'logbook',     label: 'Logbook',     short: 'LOG',   icon: BookOpen },
   { id: 'acars',       label: 'ACARS',       short: 'ACARS', icon: MessageSquare },
   { id: 'settings',    label: 'Settings',    short: 'Setup', icon: Settings },
 ];

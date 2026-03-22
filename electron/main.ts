@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
+import { setupSimulatorManager } from './simulators/manager.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import * as https from 'https';
@@ -105,6 +106,7 @@ function setupUpdater(win: BrowserWindow) {
 app.whenReady().then(() => {
   const win = createWindow();
   setupUpdater(win);
+  setupSimulatorManager(win);
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

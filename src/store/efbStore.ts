@@ -2,8 +2,11 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { SimbriefOFP } from '../types/simbrief';
 import type { HoppieMessage } from '../services/hoppie';
+import type { SimPosition } from '../types/simulator';
+import type { LogbookEntry } from '../types/logbook';
+import type { EnrouteController } from '../services/livetraffic/enrouteAtc';
 
-export type EFBPage = 'dashboard' | 'map' | 'flightplan' | 'charts' | 'performance' | 'acars' | 'settings';
+export type EFBPage = 'dashboard' | 'map' | 'flightplan' | 'charts' | 'performance' | 'acars' | 'settings' | 'logbook';
 
 interface EFBStore {
   activePage: EFBPage;
@@ -57,6 +60,39 @@ interface EFBStore {
 
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
+
+  // Simulator position (session only — never cleared on reconnect)
+  simPosition: SimPosition | null;
+  setSimPosition: (pos: SimPosition) => void;
+  simConnected: boolean;
+  simSource: 'msfs' | 'p3d' | 'xplane' | null;
+  setSimStatus: (connected: boolean, source: 'msfs' | 'p3d' | 'xplane' | null) => void;
+
+  // Breadcrumb trail (session only, not persisted)
+  simTrail: { lat: number; lon: number }[];
+  appendSimTrail: (point: { lat: number; lon: number }) => void;
+  clearSimTrail: () => void;
+
+  // Enroute ATC (session only)
+  enrouteAtc: EnrouteController[];
+  setEnrouteAtc: (controllers: EnrouteController[]) => void;
+
+  // CPDLC logon intent from Map page (session only)
+  pendingCpdlcLogon: string | null;
+  setPendingCpdlcLogon: (callsign: string | null) => void;
+
+  // Map layer toggles (persisted)
+  mapTrafficEnabled: boolean;
+  mapAtcEnabled: boolean;
+  mapTrailEnabled: boolean;
+  setMapTrafficEnabled: (v: boolean) => void;
+  setMapAtcEnabled: (v: boolean) => void;
+  setMapTrailEnabled: (v: boolean) => void;
+
+  // Logbook (persisted)
+  logbook: LogbookEntry[];
+  addLogbookEntry: (entry: LogbookEntry) => void;
+  deleteLogbookEntry: (id: string) => void;
 }
 
 export const useEFBStore = create<EFBStore>()(
@@ -118,6 +154,43 @@ export const useEFBStore = create<EFBStore>()(
 
       theme: 'dark',
       setTheme: (theme) => set({ theme }),
+
+      simPosition: null,
+      setSimPosition: (pos) => set({ simPosition: pos }),
+      simConnected: false,
+      simSource: null,
+      setSimStatus: (connected, source) => set({ simConnected: connected, simSource: source }),
+
+      simTrail: [],
+      appendSimTrail: (point) => set((state) => {
+        const trail = state.simTrail;
+        if (trail.length > 0) {
+          const last = trail[trail.length - 1];
+          const dlat = point.lat - last.lat;
+          const dlon = point.lon - last.lon;
+          if (Math.sqrt(dlat * dlat + dlon * dlon) < 0.05) return state;
+        }
+        const updated = [...trail, point];
+        return { simTrail: updated.length > 3000 ? updated.slice(updated.length - 3000) : updated };
+      }),
+      clearSimTrail: () => set({ simTrail: [] }),
+
+      enrouteAtc: [],
+      setEnrouteAtc: (controllers) => set({ enrouteAtc: controllers }),
+
+      pendingCpdlcLogon: null,
+      setPendingCpdlcLogon: (callsign) => set({ pendingCpdlcLogon: callsign }),
+
+      mapTrafficEnabled: false,
+      mapAtcEnabled: false,
+      mapTrailEnabled: false,
+      setMapTrafficEnabled: (v) => set({ mapTrafficEnabled: v }),
+      setMapAtcEnabled: (v) => set({ mapAtcEnabled: v }),
+      setMapTrailEnabled: (v) => set({ mapTrailEnabled: v }),
+
+      logbook: [],
+      addLogbookEntry: (entry) => set(s => ({ logbook: [...s.logbook, entry] })),
+      deleteLogbookEntry: (id) => set(s => ({ logbook: s.logbook.filter(e => e.id !== id) })),
     }),
     {
       name: 'openefb-storage',
@@ -128,6 +201,10 @@ export const useEFBStore = create<EFBStore>()(
         atisNetwork: state.atisNetwork,
         hoppieLogon: state.hoppieLogon,
         theme: state.theme,
+        mapTrafficEnabled: state.mapTrafficEnabled,
+        mapAtcEnabled: state.mapAtcEnabled,
+        mapTrailEnabled: state.mapTrailEnabled,
+        logbook: state.logbook,
       }),
     }
   )

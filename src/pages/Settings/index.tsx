@@ -6,20 +6,28 @@ import { Loader2, CheckCircle, AlertCircle, Settings, RefreshCw, Zap } from 'luc
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'error' | 'progress' | 'downloaded';
 
 function UpdateSection() {
-  const [status, setStatus] = useState<UpdateStatus>('idle');
-  const [info, setInfo]     = useState<string>('');
+  const [status, setStatus]       = useState<UpdateStatus>('idle');
+  const [info, setInfo]           = useState<string>('');
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
 
   useEffect(() => {
     const cleanup = window.electronAPI?.onUpdateStatus?.(({ status: s, info: i }) => {
       setStatus(s as UpdateStatus);
-      if (s === 'available')     setInfo(`v${(i as { version: string })?.version ?? ''} available`);
-      else if (s === 'progress') setInfo(`${i}%`);
-      else if (s === 'error')    setInfo(String(i));
-      else if (s === 'downloaded') setInfo('Ready to install');
-      else setInfo('');
+      if (s === 'available')       setInfo(`v${(i as { version: string })?.version ?? ''} verfügbar`);
+      else if (s === 'progress')   setInfo(`${i}%`);
+      else if (s === 'error')      setInfo(String(i));
+      else if (s === 'downloaded') setInfo('Bereit zur Installation');
+      else                         setInfo('');
+      if (s === 'not-available' || s === 'available' || s === 'error') {
+        setLastChecked(new Date());
+      }
     });
     return () => { cleanup?.(); };
   }, []);
+
+  const lastCheckedLabel = lastChecked
+    ? `Last checked: ${lastChecked.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+    : null;
 
   return (
     <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
@@ -33,7 +41,7 @@ function UpdateSection() {
             className="flex items-center gap-2 bg-[var(--c-depth)] border border-[var(--c-border)] hover:border-[var(--c-border2)] disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
             {status === 'checking' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            Check for Updates
+            {status === 'checking' ? 'Checking…' : 'Check for Updates'}
           </button>
         ) : (
           <button
@@ -43,12 +51,29 @@ function UpdateSection() {
             <Zap size={14} /> Restart & Install
           </button>
         )}
-        {info && (
-          <span className={`text-xs font-mono ${status === 'error' ? 'text-red-400' : status === 'not-available' ? 'text-gray-500' : status === 'downloaded' ? 'text-green-400' : 'text-blue-400'}`}>
-            {status === 'not-available' ? 'Already up to date' : info}
+
+        {status === 'not-available' && (
+          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+            <CheckCircle size={13} className="text-green-500" /> You're up to date
           </span>
         )}
+        {status === 'available' && info && (
+          <span className="text-xs text-blue-400">{info}</span>
+        )}
+        {status === 'progress' && info && (
+          <span className="text-xs text-blue-400 font-mono">Downloading {info}</span>
+        )}
+        {status === 'error' && info && (
+          <span className="text-xs text-red-400">{info}</span>
+        )}
+        {status === 'downloaded' && (
+          <span className="text-xs text-green-400">Update downloaded</span>
+        )}
       </div>
+
+      {lastCheckedLabel && (
+        <p className="text-xs text-gray-600 mt-3">{lastCheckedLabel}</p>
+      )}
     </div>
   );
 }

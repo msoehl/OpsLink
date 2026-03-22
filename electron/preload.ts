@@ -10,4 +10,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('update-status', (_e, payload) => cb(payload));
     return () => ipcRenderer.removeAllListeners('update-status');
   },
+  onSimPosition: (cb: (pos: unknown) => void) => {
+    ipcRenderer.on('sim:position', (_e, pos) => cb(pos));
+    return () => ipcRenderer.removeAllListeners('sim:position');
+  },
+  onSimStatus: (cb: (status: { connected: boolean; source: string | null }) => void) => {
+    ipcRenderer.on('sim:status', (_e, status) => cb(status));
+    return () => ipcRenderer.removeAllListeners('sim:status');
+  },
 });

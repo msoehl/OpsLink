@@ -13,7 +13,7 @@ interface IvaoPilot {
 }
 
 interface IvaoWhazzup {
-  connections?: { pilots?: IvaoPilot[] };
+  clients?: { pilots?: IvaoPilot[] };
 }
 
 let cachedData: VatsimPilot[] | null = null;
@@ -27,7 +27,7 @@ export async function fetchIvaoTraffic(): Promise<VatsimPilot[]> {
   if (!res.ok) throw new Error('IVAO data unavailable');
   const data: IvaoWhazzup = await res.json();
 
-  const pilots = data.connections?.pilots ?? [];
+  const pilots = data.clients?.pilots ?? [];
   cachedData = pilots
     .filter(p => p.lastTrack)
     .map(p => ({

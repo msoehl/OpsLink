@@ -27,8 +27,23 @@
       "dist-electron/**/*"
     ],
     "mac": {
-      "target": ["dmg", "zip"],
-      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "dmg": {
       "artifactName": "OpenEFB.dmg"
     },
     "win": {
@@ -50,6 +65,7 @@
     "electron-updater": "^6.8.3",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.577.0",
+    "node-simconnect": "^4.0.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-leaflet": "^5.0.0",

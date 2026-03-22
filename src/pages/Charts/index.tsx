@@ -77,7 +77,7 @@ export default function Charts() {
             type="text"
             value={icaoInput}
             onChange={(e) => setIcaoInput(e.target.value.toUpperCase())}
-            placeholder="ICAO eingeben…"
+            placeholder="Enter ICAO…"
             maxLength={4}
             className="flex-1 bg-[var(--c-depth)] border border-[var(--c-border)] focus:border-blue-500 text-white rounded-lg px-3 py-2 text-sm font-mono focus:outline-none"
           />
@@ -110,7 +110,7 @@ export default function Charts() {
 
         {selectedIcao && (
           <div className="text-xs text-gray-500">
-            Charts werden geöffnet für: <span className="font-mono text-white">{selectedIcao}</span>
+            Showing charts for: <span className="font-mono text-white">{selectedIcao}</span>
           </div>
         )}
       </div>
@@ -140,7 +140,7 @@ export default function Charts() {
               className="flex items-center justify-center gap-1.5 w-full py-2 bg-[var(--c-depth)] hover:bg-[#1a2535] border border-[var(--c-border)] hover:border-blue-500/50 text-gray-300 hover:text-white rounded-lg text-xs font-medium transition-colors"
             >
               <ExternalLink size={11} />
-              {selectedIcao ? `${p.name} · ${selectedIcao}` : `${p.name} öffnen`}
+              {selectedIcao ? `${p.name} · ${selectedIcao}` : `Open ${p.name}`}
             </button>
           </div>
         ))}
