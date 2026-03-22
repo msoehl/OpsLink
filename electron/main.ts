@@ -29,7 +29,8 @@ function createWindow(): BrowserWindow {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    titleBarOverlay: false,
     backgroundColor: '#0a0e1a',
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
@@ -63,6 +64,12 @@ function createWindow(): BrowserWindow {
 
   return win;
 }
+
+ipcMain.handle('win:minimize',    (_e, _a, win = BrowserWindow.getFocusedWindow()) => win?.minimize());
+ipcMain.handle('win:maximize',    (_e, _a, win = BrowserWindow.getFocusedWindow()) => win?.isMaximized() ? win.unmaximize() : win?.maximize());
+ipcMain.handle('win:close',       (_e, _a, win = BrowserWindow.getFocusedWindow()) => win?.close());
+ipcMain.handle('win:is-maximized',(_e, _a, win = BrowserWindow.getFocusedWindow()) => win?.isMaximized() ?? false);
+ipcMain.handle('win:platform',    () => process.platform);
 
 ipcMain.handle('open-external', (_event, url: string) => {
   // Only allow https:// URLs

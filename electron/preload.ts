@@ -18,4 +18,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('sim:status', (_e, status) => cb(status));
     return () => ipcRenderer.removeAllListeners('sim:status');
   },
+  platform:        () => ipcRenderer.invoke('win:platform'),
+  windowMinimize:  () => ipcRenderer.invoke('win:minimize'),
+  windowMaximize:  () => ipcRenderer.invoke('win:maximize'),
+  windowClose:     () => ipcRenderer.invoke('win:close'),
+  windowIsMaximized: () => ipcRenderer.invoke('win:is-maximized'),
 });
