@@ -1,3 +1,5 @@
+import type { HoppieMessage } from '../services/hoppie';
+
 export interface LogbookEntry {
   id: string;
   date: string;
@@ -7,6 +9,11 @@ export interface LogbookEntry {
   offBlockUtc: string;
   onBlockUtc: string;
   flightTimeMin: number;
-  simulator: 'msfs' | 'p3d' | 'xplane' | 'manual';
+  simulator: 'msfs' | 'p3d' | 'xplane' | 'manual' | null;
   notes: string;
+  phaseHistory: { phase: string; time: string }[];
+  acarsMessages: HoppieMessage[];
+  acType: string;
+  acReg: string;
+  ofpRequestId: string;
 }

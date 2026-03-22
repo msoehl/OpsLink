@@ -9,8 +9,6 @@ import TopBar from './components/layout/TopBar';
 import Dashboard from './pages/Dashboard';
 import MapPage from './pages/Map';
 import FlightPlan from './pages/FlightPlan';
-import Charts from './pages/Charts';
-import Performance from './pages/Performance';
 import AcarsPage from './pages/Acars';
 import SettingsPage from './pages/Settings';
 import LogbookPage from './pages/Logbook';
@@ -21,12 +19,10 @@ function PageContent() {
     case 'dashboard':   return <Dashboard />;
     case 'map':         return <MapPage />;
     case 'flightplan':  return <FlightPlan />;
-    case 'charts':      return <Charts />;
-    case 'performance': return <Performance />;
     case 'acars':       return <AcarsPage />;
     case 'settings':    return <SettingsPage />;
     case 'logbook':     return <LogbookPage />;
-    default:            return <Dashboard />;
+    default:            return <AcarsPage />;
   }
 }
 

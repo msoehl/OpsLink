@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, CircleMarker, Circle, Tooltip, Marker, Popup, Polygon, useMap } from 'react-leaflet';
 import type { LatLngTuple } from 'leaflet';
 import L from 'leaflet';
 import type { NavlogFix } from '../../types/simbrief';
 import type { VatsimPilot } from '../../services/livetraffic/vatsim';
 import type { VatsimController } from '../../services/livetraffic/vatsimAtc';
-import { fetchVatsimATIS } from '../../services/atis/vatsim';
+import type { ControllerSector } from '../../services/livetraffic/vatglasses';
+import { fetchAllVatsimATIS } from '../../services/atis/vatsim';
 import type { ATISResult } from '../../services/atis/vatsim';
 import type { SimPosition } from '../../types/simulator';
 import { useEFBStore } from '../../store/efbStore';
@@ -21,6 +22,7 @@ interface Props {
   simPosition?: SimPosition;
   showTrail?: boolean;
   controllers?: VatsimController[];
+  sectorPolygons?: ControllerSector[];
 }
 
 function FitBounds({ positions }: { positions: LatLngTuple[] }) {
@@ -48,10 +50,12 @@ const FACILITY_SHORT: Record<number, string> = { 2: 'D', 3: 'G', 4: 'T', 5: 'A',
 const FACILITY_LABEL: Record<number, string> = { 2: 'DEL', 3: 'GND', 4: 'TWR', 5: 'APP', 6: 'CTR', 8: 'ATIS' };
 
 function facilityColor(facility: number): string {
-  if (facility <= 3) return '#9ca3af';
-  if (facility === 4) return '#4ade80';
-  if (facility === 5) return '#60a5fa';
-  return '#a78bfa';
+  if (facility === 2) return '#60a5fa'; // DEL — blue
+  if (facility === 3) return '#4ade80'; // GND — green
+  if (facility === 4) return '#f87171'; // TWR — red
+  if (facility === 5) return '#bef264'; // APP — citrus
+  if (facility === 6) return '#2dd4bf'; // CTR — teal
+  return '#9ca3af';
 }
 
 function atcGroupIcon(icao: string, facilities: number[]): L.DivIcon {
@@ -79,22 +83,29 @@ function atcGroupIcon(icao: string, facilities: number[]): L.DivIcon {
 
 interface AtcGroup {
   key: string;
+  label: string;
   lat: number;
   lon: number;
   controllers: VatsimController[];
   topFacility: number;
+  maxVisualRange: number;
 }
 
 function groupControllers(controllers: VatsimController[]): AtcGroup[] {
   const map = new Map<string, AtcGroup>();
   for (const c of controllers) {
-    const key = c.icao ?? `${c.latitude.toFixed(3)},${c.longitude.toFixed(3)}`;
+    // CTR always uses coordinate key so it never merges into an airport group
+    const key = c.facility === 6
+      ? `ctr:${c.latitude.toFixed(2)},${c.longitude.toFixed(2)}`
+      : (c.icao ?? `${c.latitude.toFixed(3)},${c.longitude.toFixed(3)}`);
+    const label = c.icao ?? c.callsign.split('_')[0];
     if (!map.has(key)) {
-      map.set(key, { key, lat: c.latitude, lon: c.longitude, controllers: [], topFacility: 0 });
+      map.set(key, { key, label, lat: c.latitude, lon: c.longitude, controllers: [], topFacility: 0, maxVisualRange: 0 });
     }
     const g = map.get(key)!;
     g.controllers.push(c);
     if (c.facility > g.topFacility) g.topFacility = c.facility;
+    if (c.visualRange > g.maxVisualRange) g.maxVisualRange = c.visualRange;
   }
   return [...map.values()];
 }
@@ -115,27 +126,27 @@ function AtcTooltipContent({ group }: { group: AtcGroup }) {
   const [tab, setTab] = useState<'info' | 'wx'>('info');
   const [metar, setMetar] = useState<string | null>(null);
   const [metarLoading, setMetarLoading] = useState(false);
-  const [atis, setAtis] = useState<ATISResult | null | 'loading' | 'none'>('loading');
+  const [atisList, setAtisList] = useState<ATISResult[] | 'loading' | 'none'>('loading');
   const sorted = [...group.controllers].sort((a, b) => b.facility - a.facility);
   const topColor = facilityColor(group.topFacility);
 
   useEffect(() => {
     if (tab === 'wx' && group.key.length >= 3) {
-      if (atis === 'loading') {
-        fetchVatsimATIS(group.key)
-          .then(result => setAtis(result ?? 'none'))
-          .catch(() => setAtis('none'));
+      if (atisList === 'loading') {
+        fetchAllVatsimATIS(group.key)
+          .then(results => setAtisList(results.length > 0 ? results : 'none'))
+          .catch(() => setAtisList('none'));
       }
       if (metar === null) {
         setMetarLoading(true);
-        fetch(`https://aviationweather.gov/api/data/metar?ids=${group.key}&format=json`)
+        fetch(`https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(group.key)}&format=json`)
           .then(r => r.json())
-          .then((data: { rawOb?: string }[]) => setMetar(data[0]?.rawOb ?? 'No METAR available'))
+          .then((data: { rawOb?: string }[]) => setMetar(data?.[0]?.rawOb ?? 'No METAR available'))
           .catch(() => setMetar('METAR unavailable'))
           .finally(() => setMetarLoading(false));
       }
     }
-  }, [tab, group.key, metar, atis]);
+  }, [tab, group.key, metar, atisList]);
 
   return (
     <div style={{ fontFamily: 'monospace', fontSize: '11px', lineHeight: '1.6', minWidth: '220px' }}>
@@ -172,22 +183,20 @@ function AtcTooltipContent({ group }: { group: AtcGroup }) {
       {tab === 'wx' && (
         <div style={{ maxWidth: '300px' }}>
           <div style={{ marginBottom: '8px' }}>
-            <div style={{ color: '#60a5fa', fontWeight: 'bold', fontSize: '10px', marginBottom: '3px' }}>
-              ATIS
-              {atis !== 'loading' && atis !== 'none' && atis !== null && (
-                <span style={{ color: '#6b7280', fontWeight: 'normal' }}> · {atis.callsign} {atis.frequency}</span>
-              )}
-            </div>
-            {atis === 'loading' && <div style={{ color: '#6b7280', fontSize: '10px' }}>Loading…</div>}
-            {atis === 'none' && <div style={{ color: '#4b5563', fontSize: '10px' }}>No ATIS online</div>}
-            {atis !== 'loading' && atis !== 'none' && atis !== null && (
-              <>
-                {atis.code && <div style={{ color: '#f59e0b', fontSize: '10px', marginBottom: '2px' }}>Info {atis.code}</div>}
-                {atis.lines.map((line, i) => (
+            <div style={{ color: '#60a5fa', fontWeight: 'bold', fontSize: '10px', marginBottom: '3px' }}>ATIS</div>
+            {atisList === 'loading' && <div style={{ color: '#6b7280', fontSize: '10px' }}>Loading…</div>}
+            {atisList === 'none' && <div style={{ color: '#4b5563', fontSize: '10px' }}>No ATIS online</div>}
+            {Array.isArray(atisList) && atisList.map((atis, ai) => (
+              <div key={ai} style={{ marginBottom: ai < atisList.length - 1 ? '6px' : 0 }}>
+                <div style={{ color: '#6b7280', fontSize: '10px', marginBottom: '2px' }}>
+                  {atis.callsign} · {atis.frequency}
+                  {atis.code && <span style={{ color: '#f59e0b' }}> · Info {atis.code}</span>}
+                </div>
+                {atis.lines.map((line: string, i: number) => (
                   <div key={i} style={{ color: '#d1d5db', fontSize: '10px', whiteSpace: 'normal', lineHeight: '1.5' }}>{line}</div>
                 ))}
-              </>
-            )}
+              </div>
+            ))}
           </div>
           <div>
             <div style={{ color: '#4ade80', fontWeight: 'bold', fontSize: '10px', marginBottom: '3px' }}>METAR</div>
@@ -202,7 +211,7 @@ function AtcTooltipContent({ group }: { group: AtcGroup }) {
   );
 }
 
-export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, alternateLon, alternateIcao, traffic = [], simPosition, showTrail, controllers = [] }: Props) {
+export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, alternateLon, alternateIcao, traffic = [], simPosition, showTrail, controllers = [], sectorPolygons = [] }: Props) {
   const { theme, simTrail } = useEFBStore();
   const positions: LatLngTuple[] = fixes
     .filter((f) => f.pos_lat !== '0.000000' && f.pos_long !== '0.000000')
@@ -341,16 +350,39 @@ export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, al
         </Marker>
       ))}
 
+      {/* CTR sector polygons — real FIR boundaries from vatspy */}
+      {(sectorPolygons ?? []).flatMap((sector, i) =>
+        sector.rings.map((ring, j) => (
+          <Polygon
+            key={`sector-${i}-${j}`}
+            positions={ring}
+            pathOptions={{ color: '#2dd4bf', fillColor: '#2dd4bf', fillOpacity: 0.07, weight: 1, opacity: 0.5 }}
+          />
+        ))
+      )}
+
+      {/* APP radius circles */}
+      {groupControllers(controllers)
+        .filter(g => g.controllers.some(c => c.facility === 5) && g.maxVisualRange > 0)
+        .map(g => (
+          <Circle
+            key={`app-${g.key}`}
+            center={[g.lat, g.lon]}
+            radius={Math.min(g.maxVisualRange, 20) * 1852}
+            pathOptions={{ color: '#bef264', fillColor: '#bef264', fillOpacity: 0.04, weight: 1, opacity: 0.5 }}
+          />
+        ))}
+
       {/* VATSIM ATC stations — above traffic */}
       {groupControllers(controllers).map((group) => (
         <Marker
           key={group.key}
           position={[group.lat, group.lon]}
-          icon={atcGroupIcon(group.key, group.controllers.map(c => c.facility))}
+          icon={atcGroupIcon(group.label, group.controllers.map(c => c.facility))}
           zIndexOffset={500}
         >
           <Popup offset={[0, -8]} closeButton={false} className="atc-popup">
-            <AtcTooltipContent group={group} />
+            <AtcTooltipContent group={{ ...group, key: group.label }} />
           </Popup>
         </Marker>
       ))}

@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useEFBStore } from '../../store/efbStore';
 import { fetchOFP } from '../../services/simbrief/api';
 import { formatTime, formatFuel, formatWeight } from '../../services/simbrief/api';
-import { fetchVatsimATIS, type ATISResult } from '../../services/atis/vatsim';
-import { fetchIvaoATIS } from '../../services/atis/ivao';
-import { Loader2, RefreshCw, AlertCircle, Plane, Clock, Route, ScrollText, Cloud, Radio, WifiOff } from 'lucide-react';
+import { fetchAllVatsimATIS, type ATISResult } from '../../services/atis/vatsim';
+import { fetchAllIvaoATIS } from '../../services/atis/ivao';
+import { Loader2, RefreshCw, AlertCircle, Plane, Clock, Route, ScrollText, Cloud, Radio, WifiOff, MonitorCheck, FileText } from 'lucide-react';
+import type { LogbookEntry } from '../../types/logbook';
 import clsx from 'clsx';
 
 // ── OFP tab ───────────────────────────────────────────────────────────────────
@@ -120,7 +121,7 @@ function AtisCard({ icao, result, loading, network }: { icao: string; result: AT
 
 function WeatherTab() {
   const { ofp, atisNetwork } = useEFBStore();
-  const [atisData, setAtisData] = useState<Record<string, ATISResult | null>>({});
+  const [atisData, setAtisData] = useState<Record<string, ATISResult[]>>({});
   const [atisLoading, setAtisLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [countdown, setCountdown] = useState(300);
@@ -137,11 +138,11 @@ function WeatherTab() {
     if (airports.length === 0) return;
     setCountdown(300);
     setAtisLoading(true);
-    const fetchFn = atisNetwork === 'ivao' ? fetchIvaoATIS : fetchVatsimATIS;
+    const fetchFn = atisNetwork === 'ivao' ? fetchAllIvaoATIS : fetchAllVatsimATIS;
     Promise.all(
       airports.map(async ({ icao }) => {
-        const result = await fetchFn(icao).catch(() => null);
-        return [icao, result] as [string, ATISResult | null];
+        const results = await fetchFn(icao).catch(() => []);
+        return [icao, results] as [string, ATISResult[]];
       })
     ).then((results) => {
       setAtisData(Object.fromEntries(results));
@@ -192,7 +193,13 @@ function WeatherTab() {
       {airports.map(({ icao, label, metar, taf }) => (
         <div key={icao} className="space-y-2">
           <WeatherCard icao={icao} label={label} metar={metar} taf={taf} />
-          <AtisCard icao={icao} result={atisData[icao] ?? null} loading={atisLoading} network={atisNetwork} />
+          {atisLoading || (atisData[icao] ?? []).length === 0 ? (
+            <AtisCard icao={icao} result={null} loading={atisLoading} network={atisNetwork} />
+          ) : (
+            (atisData[icao] ?? []).map(result => (
+              <AtisCard key={result.callsign} icao={result.callsign} result={result} loading={false} network={atisNetwork} />
+            ))
+          )}
         </div>
       ))}
     </div>
@@ -215,6 +222,7 @@ export default function Dashboard() {
   const {
     ofp, setOFP, isLoadingOFP, setIsLoadingOFP,
     ofpError, setOFPError, simbriefUsername, setActivePage, clearAcarsMessages, setCpdlcStation,
+    hoppieConnected, simConnected, simSource, openLogbookEntry,
   } = useEFBStore();
   const [tab, setTab] = useState<'overview' | 'ofp' | 'weather'>('overview');
 
@@ -224,7 +232,7 @@ export default function Dashboard() {
       <div className="flex flex-col items-center justify-center h-full gap-5">
         <div className="text-center">
           <Plane size={48} className="text-blue-600 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-white mb-2">Welcome to OpenEFB</h2>
+          <h2 className="text-xl font-semibold text-white mb-2">Welcome to OpsLink</h2>
           <p className="text-gray-400 text-sm max-w-sm">
             To get started, enter your SimBrief username in Settings.
             Your flight plans will then be available here.
@@ -252,6 +260,25 @@ export default function Dashboard() {
       setOFP(data);
       clearAcarsMessages();
       setCpdlcStation('');
+      // Create logbook entry for this flight
+      const entry: LogbookEntry = {
+        id: `${data.params.request_id}-${Date.now()}`,
+        date: new Date().toISOString().slice(0, 10),
+        callsign: data.atc.callsign,
+        dep: data.origin.icao_code,
+        arr: data.destination.icao_code,
+        offBlockUtc: '',
+        onBlockUtc: '',
+        flightTimeMin: 0,
+        simulator: null,
+        notes: '',
+        phaseHistory: [],
+        acarsMessages: [],
+        acType: data.aircraft.icaocode,
+        acReg: data.aircraft.reg ?? '',
+        ofpRequestId: data.params.request_id,
+      };
+      openLogbookEntry(entry);
     } catch (e) {
       setOFPError(e instanceof Error ? e.message : 'Failed to load flight plan.');
     } finally {
@@ -315,27 +342,50 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Tab bar */}
-      <div className="flex border-b border-[var(--c-border)] shrink-0">
-        {([['overview', 'Overview'], ['ofp', 'OFP'], ['weather', 'Weather']] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={clsx(
-              'px-5 py-2.5 text-xs font-medium transition-colors border-b-2 -mb-px',
-              tab === id ? 'text-white border-blue-500' : 'text-gray-500 border-transparent hover:text-gray-300'
-            )}>
-            {label}
-          </button>
-        ))}
+      {/* Sub-page views */}
+      {tab === 'ofp' && (
+        <div className="flex flex-col h-full">
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--c-border)] shrink-0">
+            <button onClick={() => setTab('overview')} className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors">← Back</button>
+            <span className="text-xs text-gray-400">OFP Text</span>
+          </div>
+          <OFPTab />
+        </div>
+      )}
+      {tab === 'weather' && (
+        <div className="flex flex-col h-full">
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--c-border)] shrink-0">
+            <button onClick={() => setTab('overview')} className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors">← Back</button>
+            <span className="text-xs text-gray-400">Weather & ATIS</span>
+          </div>
+          <WeatherTab />
+        </div>
+      )}
+
+      {/* Overview */}
+      {tab === 'overview' && <div className="p-4 overflow-auto flex-1">
+      {/* Connection status row */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <div className={clsx('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] border font-mono',
+          hoppieConnected === true ? 'border-green-500/40 bg-green-500/5 text-green-400'
+          : hoppieConnected === false ? 'border-red-500/40 bg-red-500/5 text-red-400'
+          : 'border-[var(--c-border)] text-gray-500')}>
+          <Radio size={9} />
+          {hoppieConnected === true ? 'Hoppie OK' : hoppieConnected === false ? 'Hoppie Offline' : 'Hoppie —'}
+        </div>
+        <div className={clsx('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] border font-mono',
+          simConnected ? 'border-blue-500/40 bg-blue-500/5 text-blue-400' : 'border-[var(--c-border)] text-gray-500')}>
+          <MonitorCheck size={9} />
+          {simConnected ? `Sim: ${simSource?.toUpperCase() ?? 'OK'}` : 'Sim: —'}
+        </div>
+        {ofpAgeHours > 2 && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] border border-amber-500/40 bg-amber-500/5 text-amber-400 font-mono">
+            <AlertCircle size={9} />
+            OFP {Math.floor(ofpAgeHours)}h old
+          </div>
+        )}
       </div>
 
-      {/* OFP tab */}
-      {tab === 'ofp' && <OFPTab />}
-
-      {/* Weather tab */}
-      {tab === 'weather' && <WeatherTab />}
-
-      {/* Overview tab */}
-      {tab === 'overview' && <div className="p-4 overflow-auto flex-1">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
@@ -351,18 +401,28 @@ export default function Dashboard() {
             <span>FLT {general.flight_number}</span>
           </div>
         </div>
-        <button
-          onClick={loadOFP}
-          disabled={isLoadingOFP}
-          className={`flex items-center gap-2 text-sm border px-3 py-1.5 rounded-lg transition-colors ${
-            ofpAgeHours > 2
-              ? 'text-amber-400 border-amber-400/30 hover:border-amber-400/60'
-              : 'text-gray-400 hover:text-white border-[var(--c-border)] hover:border-[var(--c-border2)]'
-          }`}
-        >
-          {isLoadingOFP ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          {ofpAgeHours > 2 ? `${Math.floor(ofpAgeHours)}h old` : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => setTab('weather')}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white border border-[var(--c-border)] hover:border-[var(--c-border2)] px-2.5 py-1.5 rounded-lg transition-colors">
+            <Cloud size={13} /> Weather
+          </button>
+          <button onClick={() => setTab('ofp')}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white border border-[var(--c-border)] hover:border-[var(--c-border2)] px-2.5 py-1.5 rounded-lg transition-colors">
+            <FileText size={13} /> OFP
+          </button>
+          <button
+            onClick={loadOFP}
+            disabled={isLoadingOFP}
+            className={`flex items-center gap-1.5 text-xs border px-2.5 py-1.5 rounded-lg transition-colors ${
+              ofpAgeHours > 2
+                ? 'text-amber-400 border-amber-400/30 hover:border-amber-400/60'
+                : 'text-gray-400 hover:text-white border-[var(--c-border)] hover:border-[var(--c-border2)]'
+            }`}
+          >
+            {isLoadingOFP ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            {ofpAgeHours > 2 ? `${Math.floor(ofpAgeHours)}h old` : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* Route */}

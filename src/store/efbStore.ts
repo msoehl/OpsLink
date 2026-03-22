@@ -3,10 +3,16 @@ import { persist } from 'zustand/middleware';
 import type { SimbriefOFP } from '../types/simbrief';
 import type { HoppieMessage } from '../services/hoppie';
 import type { SimPosition } from '../types/simulator';
-import type { LogbookEntry } from '../types/logbook';
 import type { EnrouteController } from '../services/livetraffic/enrouteAtc';
+import type { LogbookEntry } from '../types/logbook';
 
-export type EFBPage = 'dashboard' | 'map' | 'flightplan' | 'charts' | 'performance' | 'acars' | 'settings' | 'logbook';
+export type EFBPage = 'dashboard' | 'map' | 'flightplan' | 'acars' | 'settings' | 'logbook';
+
+export interface AcarsTemplate {
+  id: string;
+  name: string;
+  text: string;
+}
 
 interface EFBStore {
   activePage: EFBPage;
@@ -21,9 +27,6 @@ interface EFBStore {
   ofpError: string | null;
   setOFPError: (error: string | null) => void;
 
-  selectedAirport: string;
-  setSelectedAirport: (icao: string) => void;
-
   atisNetwork: 'vatsim' | 'ivao';
   setAtisNetwork: (network: 'vatsim' | 'ivao') => void;
 
@@ -33,9 +36,8 @@ interface EFBStore {
   // Per-waypoint actuals (session only, not persisted)
   waypointActuals: Record<number, { fob: string; ato: string }>;
   setWaypointActual: (idx: number, data: Partial<{ fob: string; ato: string }>) => void;
-  clearWaypointActuals: () => void;
 
-  // ACARS messages (session only)
+  // ACARS messages (persisted, capped at 500)
   acarsMessages: HoppieMessage[];
   addAcarsMessage: (msg: HoppieMessage) => void;
   clearAcarsMessages: () => void;
@@ -57,6 +59,15 @@ interface EFBStore {
   setHoppiePolling: (v: boolean) => void;
   hoppieError: string | null;
   setHoppieError: (v: string | null) => void;
+
+  // Sound toggle (persisted)
+  soundEnabled: boolean;
+  setSoundEnabled: (v: boolean) => void;
+
+  // Message templates (persisted)
+  acarsTemplates: AcarsTemplate[];
+  addAcarsTemplate: (t: Omit<AcarsTemplate, 'id'>) => void;
+  removeAcarsTemplate: (id: string) => void;
 
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
@@ -90,15 +101,18 @@ interface EFBStore {
   setMapTrailEnabled: (v: boolean) => void;
 
   // Logbook (persisted)
-  logbook: LogbookEntry[];
-  addLogbookEntry: (entry: LogbookEntry) => void;
+  logbookEntries: LogbookEntry[];
+  activeLogbookEntryId: string | null;
+  openLogbookEntry: (entry: LogbookEntry) => void;
+  closeLogbookEntry: () => void;
+  updateLogbookEntry: (id: string, patch: Partial<LogbookEntry>) => void;
   deleteLogbookEntry: (id: string) => void;
 }
 
 export const useEFBStore = create<EFBStore>()(
   persist(
-    (set) => ({
-      activePage: 'dashboard',
+    (set, get) => ({
+      activePage: 'acars',
       setActivePage: (page) => set({ activePage: page }),
 
       simbriefUsername: '',
@@ -109,9 +123,6 @@ export const useEFBStore = create<EFBStore>()(
       setIsLoadingOFP: (loading) => set({ isLoadingOFP: loading }),
       ofpError: null,
       setOFPError: (error) => set({ ofpError: error }),
-
-      selectedAirport: '',
-      setSelectedAirport: (icao) => set({ selectedAirport: icao }),
 
       atisNetwork: 'vatsim',
       setAtisNetwork: (network) => set({ atisNetwork: network }),
@@ -126,10 +137,11 @@ export const useEFBStore = create<EFBStore>()(
           [idx]: { ...{ fob: '', ato: '' }, ...state.waypointActuals[idx], ...data },
         },
       })),
-      clearWaypointActuals: () => set({ waypointActuals: {} }),
-
       acarsMessages: [],
-      addAcarsMessage: (msg) => set(s => ({ acarsMessages: [...s.acarsMessages, msg] })),
+      addAcarsMessage: (msg) => set(s => {
+        const updated = [...s.acarsMessages, { ...msg, receivedAt: new Date(msg.receivedAt) }];
+        return { acarsMessages: updated.length > 500 ? updated.slice(updated.length - 500) : updated };
+      }),
       clearAcarsMessages: () => set({ acarsMessages: [] }),
 
       cpdlcStation: '',
@@ -151,6 +163,17 @@ export const useEFBStore = create<EFBStore>()(
       setHoppiePolling: (v) => set({ hoppiePolling: v }),
       hoppieError: null,
       setHoppieError: (v) => set({ hoppieError: v }),
+
+      soundEnabled: true,
+      setSoundEnabled: (v) => set({ soundEnabled: v }),
+
+      acarsTemplates: [],
+      addAcarsTemplate: (t) => set(s => ({
+        acarsTemplates: [...s.acarsTemplates, { ...t, id: Date.now().toString(36) }],
+      })),
+      removeAcarsTemplate: (id) => set(s => ({
+        acarsTemplates: s.acarsTemplates.filter(t => t.id !== id),
+      })),
 
       theme: 'dark',
       setTheme: (theme) => set({ theme }),
@@ -188,9 +211,26 @@ export const useEFBStore = create<EFBStore>()(
       setMapAtcEnabled: (v) => set({ mapAtcEnabled: v }),
       setMapTrailEnabled: (v) => set({ mapTrailEnabled: v }),
 
-      logbook: [],
-      addLogbookEntry: (entry) => set(s => ({ logbook: [...s.logbook, entry] })),
-      deleteLogbookEntry: (id) => set(s => ({ logbook: s.logbook.filter(e => e.id !== id) })),
+      logbookEntries: [],
+      activeLogbookEntryId: null,
+      openLogbookEntry: (entry) => set(s => ({
+        logbookEntries: [entry, ...s.logbookEntries],
+        activeLogbookEntryId: entry.id,
+      })),
+      closeLogbookEntry: () => set(s => {
+        if (!s.activeLogbookEntryId) return s;
+        const messages = get().acarsMessages;
+        const updatedEntries = s.logbookEntries.map(e =>
+          e.id === s.activeLogbookEntryId ? { ...e, acarsMessages: messages } : e
+        );
+        return { logbookEntries: updatedEntries, activeLogbookEntryId: null };
+      }),
+      updateLogbookEntry: (id, patch) => set(s => ({
+        logbookEntries: s.logbookEntries.map(e => e.id === id ? { ...e, ...patch } : e),
+      })),
+      deleteLogbookEntry: (id) => set(s => ({
+        logbookEntries: s.logbookEntries.filter(e => e.id !== id),
+      })),
     }),
     {
       name: 'openefb-storage',
@@ -201,10 +241,13 @@ export const useEFBStore = create<EFBStore>()(
         atisNetwork: state.atisNetwork,
         hoppieLogon: state.hoppieLogon,
         theme: state.theme,
+        soundEnabled: state.soundEnabled,
+        acarsTemplates: state.acarsTemplates,
+        acarsMessages: state.acarsMessages,
         mapTrafficEnabled: state.mapTrafficEnabled,
         mapAtcEnabled: state.mapAtcEnabled,
         mapTrailEnabled: state.mapTrailEnabled,
-        logbook: state.logbook,
+        logbookEntries: state.logbookEntries,
       }),
     }
   )

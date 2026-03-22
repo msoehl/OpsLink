@@ -50,7 +50,6 @@ function airportControllers(
   if (!icao) return [];
   return controllers
     .filter(c =>
-      validCoords(c) &&
       c.icao?.toUpperCase() === icao.toUpperCase() &&
       (includeApp || c.facility !== 5),
     )

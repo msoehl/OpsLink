@@ -23,10 +23,9 @@ interface VatsimAtcData {
   controllers?: VatsimRawController[];
 }
 
-interface AvwxAirport {
-  icaoId: string;
-  lat: number;
-  lon: number;
+interface VatsimTransceiver {
+  callsign: string;
+  transceivers: { latDeg: number; lonDeg: number }[];
 }
 
 // Approximate center coordinates for common FIR/UIR/ARTCC identifiers
@@ -76,17 +75,16 @@ function icaoFromCallsign(callsign: string): string | null {
   return prefix.length >= 3 && prefix.length <= 4 ? prefix : null;
 }
 
-async function fetchAirportCoords(icaos: string[]): Promise<Map<string, { lat: number; lon: number }>> {
-  if (icaos.length === 0) return new Map();
+async function fetchTransceiverCoords(): Promise<Map<string, { lat: number; lon: number }>> {
   try {
-    const ids = icaos.join(',');
-    const res = await fetch(`https://aviationweather.gov/api/data/airport?ids=${ids}&format=json`);
+    const res = await fetch('https://data.vatsim.net/v3/transceivers-data.json');
     if (!res.ok) return new Map();
-    const data: AvwxAirport[] = await res.json();
+    const data: VatsimTransceiver[] = await res.json();
     const map = new Map<string, { lat: number; lon: number }>();
-    for (const ap of data) {
-      if (ap.icaoId && isFinite(ap.lat) && isFinite(ap.lon)) {
-        map.set(ap.icaoId.toUpperCase(), { lat: ap.lat, lon: ap.lon });
+    for (const entry of data) {
+      const t = entry.transceivers?.[0];
+      if (t && isFinite(t.latDeg) && isFinite(t.lonDeg) && !(t.latDeg === 0 && t.lonDeg === 0)) {
+        map.set(entry.callsign, { lat: t.latDeg, lon: t.lonDeg });
       }
     }
     return map;
@@ -98,51 +96,34 @@ async function fetchAirportCoords(icaos: string[]): Promise<Map<string, { lat: n
 export async function fetchVatsimControllers(): Promise<VatsimController[]> {
   if (cachedControllers && Date.now() - cacheTime < CACHE_MS) return cachedControllers;
 
-  const res = await fetch('https://data.vatsim.net/v3/vatsim-data.json');
-  if (!res.ok) throw new Error('VATSIM data unavailable');
-  const data: VatsimAtcData = await res.json();
+  const [dataRes, transceiverMap] = await Promise.all([
+    fetch('https://data.vatsim.net/v3/vatsim-data.json'),
+    fetchTransceiverCoords(),
+  ]);
+
+  if (!dataRes.ok) throw new Error('VATSIM data unavailable');
+  const data: VatsimAtcData = await dataRes.json();
 
   const raw = (data.controllers ?? []).filter(c => c.facility >= 2 && c.facility !== 1);
 
-  // Collect unique ICAO prefixes for airport coordinate lookup
-  const icaoSet = new Set<string>();
-  for (const c of raw) {
-    const icao = icaoFromCallsign(c.callsign);
-    if (icao) icaoSet.add(icao);
-  }
-
-  const coordMap = await fetchAirportCoords([...icaoSet]);
-
   cachedControllers = raw.flatMap((c) => {
     const icao = icaoFromCallsign(c.callsign);
-    // Use VATSIM-provided coords if valid
+
+    // 1. VATSIM-provided coords
     if (isFinite(c.latitude) && isFinite(c.longitude) && !(c.latitude === 0 && c.longitude === 0)) {
-      return [{
-        callsign: c.callsign,
-        frequency: c.frequency,
-        facility: c.facility,
-        latitude: c.latitude,
-        longitude: c.longitude,
-        textAtis: c.text_atis ?? [],
-        visualRange: c.visual_range,
-        icao,
-      }];
+      return [{ callsign: c.callsign, frequency: c.frequency, facility: c.facility, latitude: c.latitude, longitude: c.longitude, textAtis: c.text_atis ?? [], visualRange: c.visual_range, icao }];
     }
-    // Fall back to airport coordinates, then FIR center table
-    const coords = icao
-      ? (coordMap.get(icao.toUpperCase()) ?? FIR_CENTERS[icao.toUpperCase()])
-      : undefined;
-    if (!coords) return [];
-    return [{
-      callsign: c.callsign,
-      frequency: c.frequency,
-      facility: c.facility,
-      latitude: coords.lat,
-      longitude: coords.lon,
-      textAtis: c.text_atis ?? [],
-      visualRange: c.visual_range,
-      icao,
-    }];
+    // 2. Transceivers API
+    const tc = transceiverMap.get(c.callsign);
+    if (tc) {
+      return [{ callsign: c.callsign, frequency: c.frequency, facility: c.facility, latitude: tc.lat, longitude: tc.lon, textAtis: c.text_atis ?? [], visualRange: c.visual_range, icao }];
+    }
+    // 3. FIR center table (last resort for CTR/FIR stations)
+    const fir = icao ? FIR_CENTERS[icao.toUpperCase()] : undefined;
+    if (fir) {
+      return [{ callsign: c.callsign, frequency: c.frequency, facility: c.facility, latitude: fir.lat, longitude: fir.lon, textAtis: c.text_atis ?? [], visualRange: c.visual_range, icao }];
+    }
+    return [];
   });
 
   cacheTime = Date.now();

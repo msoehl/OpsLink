@@ -78,7 +78,7 @@ export default function TopBar() {
     <header style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       className={`h-10 bg-[var(--c-depth)] border-b border-[var(--c-border)] flex items-center justify-between shrink-0 ${isWindows ? 'pl-4' : 'pl-20'} ${isWindows ? 'pr-0' : 'pr-4'}`}>
       <div className="flex items-center gap-3">
-        <span className="text-xs font-bold tracking-widest text-blue-400 uppercase">OpenEFB</span>
+        <span className="text-xs font-bold tracking-widest text-blue-400 uppercase">OpsLink</span>
         {flightInfo && (
           <>
             <span className="text-gray-600">·</span>

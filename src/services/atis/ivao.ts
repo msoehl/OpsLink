@@ -22,21 +22,24 @@ async function getIvaoData(): Promise<IvaoData> {
   return response.data;
 }
 
-export async function fetchIvaoATIS(icao: string): Promise<ATISResult | null> {
-  const data = await getIvaoData();
-  const re = new RegExp(`^${icao.toUpperCase()}_ATIS`, 'i');
-  const match = data.clients?.atcs?.find((a) => re.test(a.callsign));
-  if (!match) return null;
-
-  const text = match.atisMessage ?? '';
-  // Extract ATIS letter from message (usually the first single uppercase letter after INFO/INFORMATION)
+function parseAtc(a: IvaoATC): ATISResult {
+  const text = a.atisMessage ?? '';
   const codeMatch = text.match(/\bINFO(?:RMATION)?\s+([A-Z])\b/i);
-  const code = codeMatch ? codeMatch[1].toUpperCase() : null;
-
   return {
-    callsign: match.callsign,
-    frequency: match.lastTrack?.frequency?.toFixed(3) ?? '—',
-    code,
+    callsign: a.callsign,
+    frequency: a.lastTrack?.frequency?.toFixed(3) ?? '—',
+    code: codeMatch ? codeMatch[1].toUpperCase() : null,
     lines: text ? [text] : [],
   };
+}
+
+export async function fetchIvaoATIS(icao: string): Promise<ATISResult | null> {
+  const results = await fetchAllIvaoATIS(icao);
+  return results[0] ?? null;
+}
+
+export async function fetchAllIvaoATIS(icao: string): Promise<ATISResult[]> {
+  const data = await getIvaoData();
+  const re = new RegExp(`^${icao.toUpperCase()}_[A-Z_]*ATIS`, 'i');
+  return (data.clients?.atcs ?? []).filter(a => re.test(a.callsign)).map(parseAtc);
 }

@@ -50,12 +50,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: |
-            ## Download OpenEFB ${{ github.ref_name }}
+            ## Download OpsLink ${{ github.ref_name }}
 
             | Platform | Datei |
             |----------|-------|
-            | 🍎 macOS | **[OpenEFB.dmg](https://github.com/msoehl/openefb/releases/download/${{ github.ref_name }}/OpenEFB.dmg)** |
-            | 🪟 Windows | **[OpenEFB-Setup.exe](https://github.com/msoehl/openefb/releases/download/${{ github.ref_name }}/OpenEFB-Setup.exe)** |
+            | 🍎 macOS | **[OpsLink.dmg](https://github.com/msoehl/OpsLink/releases/download/${{ github.ref_name }}/OpsLink.dmg)** |
+            | 🪟 Windows | **[OpsLink-Setup.exe](https://github.com/msoehl/OpsLink/releases/download/${{ github.ref_name }}/OpsLink-Setup.exe)** |
 
             > **macOS:** Nicht signiert — beim ersten Start Rechtsklick → **Öffnen**.
 

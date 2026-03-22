@@ -12,7 +12,7 @@ const isDev = !app.isPackaged;
 
 function fetchJson(url: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'OpenEFB/0.1.0' } }, (res) => {
+    https.get(url, { headers: { 'User-Agent': 'OpsLink/0.1.0' } }, (res) => {
       let data = '';
       res.on('data', (chunk: string) => { data += chunk; });
       res.on('end', () => {

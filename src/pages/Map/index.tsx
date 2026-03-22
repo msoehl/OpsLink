@@ -7,6 +7,7 @@ import { fetchIvaoTraffic } from '../../services/livetraffic/ivao';
 import { fetchVatsimControllers, type VatsimController } from '../../services/livetraffic/vatsimAtc';
 import { fetchIvaoControllers } from '../../services/livetraffic/ivaoAtc';
 import { filterEnrouteControllers } from '../../services/livetraffic/enrouteAtc';
+import { fetchControllerSectors, type ControllerSector } from '../../services/livetraffic/vatglasses';
 import type { EnrouteController } from '../../services/livetraffic/enrouteAtc';
 import { Globe, Radio, Loader2, WifiOff, Joystick, Navigation, Trash2, Headphones, Copy, Check, LogIn } from 'lucide-react';
 
@@ -20,7 +21,7 @@ function fixDist(lat1: number, lon1: number, lat2: number, lon2: number): number
 }
 
 const FACILITY_COLOR: Record<number, string> = {
-  2: '#9ca3af', 3: '#9ca3af', 4: '#4ade80', 5: '#60a5fa', 6: '#a78bfa', 8: '#f59e0b',
+  2: '#60a5fa', 3: '#4ade80', 4: '#f87171', 5: '#bef264', 6: '#2dd4bf', 8: '#f59e0b',
 };
 const FACILITY_LABEL: Record<number, string> = {
   2: 'DEL', 3: 'GND', 4: 'TWR', 5: 'APP', 6: 'CTR', 8: 'ATIS',
@@ -147,7 +148,8 @@ export default function MapPage() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [atc, setAtc] = useState<VatsimController[]>([]);
-  const [atcRaw, setAtcRaw] = useState(0); // total before coord filter
+  const [atcRaw, setAtcRaw] = useState(0);
+  const [sectorPolygons, setSectorPolygons] = useState<ControllerSector[]>([]);
   const atcIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fixes: NavlogFix[] = ofp
@@ -207,10 +209,19 @@ export default function MapPage() {
         ofp?.destination.icao_code ?? '',
         ofp?.alternate?.icao_code,
       ));
+      // Only fetch sector polygons for VATSIM (not IVAO)
+      // Use only controllers with valid coordinates (= visible on map) to avoid phantom sectors
+      if (atisNetwork !== 'ivao') {
+        const visible = controllers.filter(c =>
+          isFinite(c.latitude) && isFinite(c.longitude) && !(c.latitude === 0 && c.longitude === 0)
+        );
+        fetchControllerSectors(visible).then(setSectorPolygons).catch(() => {});
+      }
     } catch {
       setAtcRaw(0);
       setAtc([]);
       setEnrouteAtc([]);
+      setSectorPolygons([]);
     }
   }
 
@@ -403,6 +414,7 @@ export default function MapPage() {
               simPosition={simPosition ?? undefined}
               showTrail={trailEnabled}
               controllers={atcVisible}
+              sectorPolygons={atcEnabled ? sectorPolygons : []}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500 text-sm">

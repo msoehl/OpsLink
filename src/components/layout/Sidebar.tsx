@@ -4,8 +4,6 @@ import {
   LayoutDashboard,
   Globe,
   FileText,
-  Map,
-  Gauge,
   MessageSquare,
   Settings,
   Plane,
@@ -15,12 +13,10 @@ import clsx from 'clsx';
 
 const navItems: { id: EFBPage; label: string; short: string; icon: React.ElementType }[] = [
   { id: 'dashboard',   label: 'Dashboard',   short: 'Dash',  icon: LayoutDashboard },
-  { id: 'map',         label: 'Map',         short: 'Map',   icon: Globe },
-  { id: 'performance', label: 'Performance', short: 'Perf',  icon: Gauge },
-  { id: 'charts',      label: 'Charts',      short: 'Charts', icon: Map },
-  { id: 'flightplan',  label: 'Flight Plan', short: 'F-PLN', icon: FileText },
-  { id: 'logbook',     label: 'Logbook',     short: 'LOG',   icon: BookOpen },
   { id: 'acars',       label: 'ACARS',       short: 'ACARS', icon: MessageSquare },
+  { id: 'map',         label: 'Map',         short: 'Map',   icon: Globe },
+  { id: 'flightplan',  label: 'Flight Plan', short: 'F-PLN', icon: FileText },
+  { id: 'logbook',     label: 'Logbook',     short: 'Log',   icon: BookOpen },
   { id: 'settings',    label: 'Settings',    short: 'Setup', icon: Settings },
 ];
 

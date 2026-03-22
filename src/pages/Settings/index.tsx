@@ -32,7 +32,7 @@ function UpdateSection() {
   return (
     <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
       <h3 className="text-sm font-semibold text-white mb-1">Updates</h3>
-      <p className="text-xs text-gray-500 mb-4">Check for new versions of OpenEFB.</p>
+      <p className="text-xs text-gray-500 mb-4">Check for new versions of OpsLink.</p>
       <div className="flex items-center gap-3 flex-wrap">
         {status !== 'downloaded' ? (
           <button
@@ -209,13 +209,21 @@ export default function SettingsPage() {
 
         {/* About */}
         <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
-          <h3 className="text-sm font-semibold text-white mb-1">About OpenEFB</h3>
+          <h3 className="text-sm font-semibold text-white mb-1">About OpsLink</h3>
           <p className="text-xs text-gray-500 leading-relaxed">
-            A free, open-source Electronic Flight Bag built for flight simulator enthusiasts.
-            Integrates SimBrief for flight planning, Hoppie ACARS for datalink messaging,
-            and live traffic via VATSIM and IVAO.
+            A free, open-source ACARS datalink & flight operations tool for flight simulator enthusiasts.
+            Integrates SimBrief, Hoppie ACARS, CPDLC, and live VATSIM/IVAO data.
           </p>
           <div className="mt-3 text-xs text-gray-600">Version 0.1.0 · For simulator use only</div>
+          <div className="mt-4 pt-4 border-t border-[var(--c-border)] flex items-center gap-3">
+            <button
+              onClick={() => window.electronAPI?.openExternal('https://buymeacoffee.com/YOUR_USERNAME')}
+              className="flex items-center gap-2 bg-[#FFDD00] hover:bg-[#f0ce00] text-black px-4 py-2 rounded-lg text-xs font-bold transition-colors"
+            >
+              ☕ Buy me a coffee
+            </button>
+            <span className="text-xs text-gray-600">If you find OpsLink useful</span>
+          </div>
         </div>
       </div>
     </div>

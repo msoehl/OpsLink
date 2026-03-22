@@ -31,14 +31,19 @@ export interface ATISResult {
 }
 
 export async function fetchVatsimATIS(icao: string): Promise<ATISResult | null> {
+  const results = await fetchAllVatsimATIS(icao);
+  return results[0] ?? null;
+}
+
+export async function fetchAllVatsimATIS(icao: string): Promise<ATISResult[]> {
   const data = await getVatsimData();
-  const re = new RegExp(`^${icao.toUpperCase()}_ATIS`, 'i');
-  const match = data.atis?.find((a) => re.test(a.callsign));
-  if (!match) return null;
-  return {
-    callsign: match.callsign,
-    frequency: match.frequency,
-    code: match.atis_code,
-    lines: match.text_atis ?? [],
-  };
+  const re = new RegExp(`^${icao.toUpperCase()}_[A-Z_]*ATIS`, 'i');
+  return (data.atis ?? [])
+    .filter(a => re.test(a.callsign))
+    .map(a => ({
+      callsign: a.callsign,
+      frequency: a.frequency,
+      code: a.atis_code,
+      lines: a.text_atis ?? [],
+    }));
 }

@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEFBStore } from '../../store/efbStore';
 import {
-  hoppiePoll, hoppieSend, hoppieStationOnline,
+  hoppiePoll, hoppieSend, hoppieStationOnline, hoppieOnlineStations,
   parseCpdlc, buildCpdlcPacket, cpdlcNeedsResponse,
   type HoppieMessage,
 } from '../../services/hoppie';
-import { fetchVatsimATIS } from '../../services/atis/vatsim';
-import { fetchIvaoATIS } from '../../services/atis/ivao';
-import { MessageSquare, Send, Loader2, CheckCircle, AlertCircle, Radio, Wifi, Globe, MapPin, Plane, Building2, ClipboardList } from 'lucide-react';
+import { fetchVatsimATIS, fetchAllVatsimATIS, type ATISResult } from '../../services/atis/vatsim';
+import { fetchIvaoATIS, fetchAllIvaoATIS } from '../../services/atis/ivao';
+import { playIncomingBeep, playCpdlcChime, playOpsBeep } from '../../services/audio';
+import {
+  MessageSquare, Send, Loader2, CheckCircle, AlertCircle, Radio, Wifi, Globe,
+  MapPin, Plane, Building2, ClipboardList, Search, Volume2, VolumeX, BookmarkPlus, X,
+} from 'lucide-react';
 import clsx from 'clsx';
 
 type ComposeMode = 'telex' | 'pdc' | 'datis' | 'oceanic' | 'cpdlc' | 'position' | 'ops' | 'loadsheet';
@@ -19,7 +23,6 @@ const COMPOSE_MODES: { id: ComposeMode; label: string; icon: React.ElementType }
   { id: 'loadsheet',  label: 'Loadsheet',  icon: ClipboardList },
   { id: 'position',   label: 'Position',   icon: MapPin },
   { id: 'oceanic',    label: 'Oceanic',    icon: Globe },
-
   { id: 'ops',        label: 'OPS',        icon: Building2 },
   { id: 'telex',      label: 'Telex',      icon: Send },
 ];
@@ -42,6 +45,15 @@ const ACCENT: Record<string, string> = {
   wilco:     'border-amber-500/40 bg-amber-500/5',
   none:      'border-[var(--c-border)] bg-[var(--c-surface)]',
 };
+
+function parsePDCMessage(packet: string): { squawk?: string; sid?: string; initialClimb?: string } | null {
+  const up = packet.toUpperCase();
+  if (!up.includes('PREDEP') && !up.includes('CLEARANCE') && !up.includes('SQUAWK')) return null;
+  const squawk    = up.match(/SQUAWK\s+(\d{4})/)?.[1];
+  const sid       = up.match(/(?:SID|DEPARTURE)\s+([A-Z]{2,6}\d[A-Z]?)/)?.[1];
+  const initClimb = up.match(/(?:CLIMB TO|INITIAL CLIMB|CLB TO|CLIMB)\s+(FL\d+|\d{4,5})/)?.[1];
+  return (squawk || sid || initClimb) ? { squawk, sid, initialClimb: initClimb } : null;
+}
 
 // ── small shared input ─────────────────────────────────────────────────────────
 
@@ -69,11 +81,14 @@ function TelexForm({ onSend, defaultTo = '' }: {
   onSend: (to: string, pkt: string) => Promise<void>;
   defaultTo?: string;
 }) {
+  const { acarsTemplates, addAcarsTemplate, removeAcarsTemplate } = useEFBStore();
   const [to, setTo] = useState(defaultTo);
   const [msg, setMsg] = useState('');
   const [sending, setSending] = useState(false);
   const [ok, setOk] = useState(false);
   const [err, setErr] = useState('');
+  const [saveName, setSaveName] = useState('');
+  const [showSave, setShowSave] = useState(false);
 
   useEffect(() => { if (defaultTo) setTo(defaultTo); }, [defaultTo]);
 
@@ -93,11 +108,25 @@ function TelexForm({ onSend, defaultTo = '' }: {
     }
   }
 
+  function saveTemplate() {
+    if (!saveName.trim() || !msg.trim()) return;
+    addAcarsTemplate({ name: saveName.trim(), text: msg });
+    setSaveName('');
+    setShowSave(false);
+  }
+
   return (
     <div className="space-y-1.5">
       <div className="flex gap-2">
         <Inp value={to} onChange={setTo} placeholder="TO  e.g. EDDF_APP" className="w-40 shrink-0" />
         <Inp value={msg} onChange={setMsg} placeholder="Message…" className="flex-1" />
+        <button
+          onClick={() => setShowSave(s => !s)}
+          title="Save as template"
+          className="p-2 text-gray-500 hover:text-blue-400 border border-[var(--c-border)] hover:border-blue-500/50 rounded-lg transition-colors shrink-0"
+        >
+          <BookmarkPlus size={12} />
+        </button>
         <button
           onClick={submit}
           disabled={sending || !to || !msg}
@@ -107,6 +136,45 @@ function TelexForm({ onSend, defaultTo = '' }: {
           Send
         </button>
       </div>
+      {showSave && (
+        <div className="flex gap-2">
+          <input
+            value={saveName}
+            onChange={e => setSaveName(e.target.value)}
+            placeholder="Template name…"
+            className="flex-1 bg-[var(--c-depth)] border border-[var(--c-border)] focus:border-blue-500 text-white rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none"
+          />
+          <button onClick={saveTemplate} disabled={!saveName.trim() || !msg.trim()}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors">
+            Save
+          </button>
+          <button onClick={() => setShowSave(false)}
+            className="px-2 py-1.5 border border-[var(--c-border)] text-gray-500 hover:text-gray-300 rounded-lg text-xs transition-colors">
+            <X size={11} />
+          </button>
+        </div>
+      )}
+      {acarsTemplates.length > 0 && (
+        <div className="flex flex-wrap gap-1 pt-0.5">
+          {acarsTemplates.map(t => (
+            <div key={t.id} className="flex items-center gap-0 rounded border border-[var(--c-border)] overflow-hidden">
+              <button
+                onClick={() => setMsg(t.text)}
+                className="px-2 py-0.5 text-[10px] font-mono text-gray-400 hover:text-white hover:bg-[var(--c-border)] transition-colors"
+                title={t.text}
+              >
+                {t.name}
+              </button>
+              <button
+                onClick={() => removeAcarsTemplate(t.id)}
+                className="px-1 py-0.5 text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                <X size={9} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {err && <p className="text-[10px] text-red-400 font-mono">{err}</p>}
     </div>
   );
@@ -119,22 +187,21 @@ function PDCForm({ depIcao, destIcao, atcCallsign, acType, route, hoppieLogon, c
 }) {
   const [atis, setAtis] = useState('');
   const [stand, setStand] = useState('');
-  const [suffix, setSuffix] = useState('');
-  const [online, setOnline] = useState<string[] | null>(null);
+  const [suffix, setSuffix] = useState(depIcao);
+  const [online, setOnline] = useState<string[]>([]);
+
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    setOnline(null);
-    setSuffix('');
-    const suffixes = ['DEL', 'GND', 'TWR', 'APP', 'CTR'];
-    Promise.all(suffixes.map(s => hoppieStationOnline(hoppieLogon, callsign, `${depIcao}_${s}`))).then(res => {
-      const found = suffixes.filter((_, i) => res[i]);
+    setSuffix(depIcao);
+    setOnline([]);
+    hoppieOnlineStations(depIcao).then(found => {
       setOnline(found);
       if (found.length > 0) setSuffix(found[0]);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depIcao, hoppieLogon, callsign]);
+  }, [depIcao]);
 
   async function submit() {
     if (!atis || !suffix) return;
@@ -149,7 +216,7 @@ function PDCForm({ depIcao, destIcao, atcCallsign, acType, route, hoppieLogon, c
     ];
     setErr('');
     try {
-      await onSend(`${depIcao}_${suffix}`, lines.join('\n'));
+      await onSend(suffix, lines.join('\n'));
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Send failed');
     } finally {
@@ -159,23 +226,17 @@ function PDCForm({ depIcao, destIcao, atcCallsign, acType, route, hoppieLogon, c
 
   return (
     <div className="space-y-2">
-      {/* Station */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] text-gray-500 shrink-0">Station:</span>
-        {online === null ? (
-          <span className="flex items-center gap-1 text-[10px] text-gray-600"><Loader2 size={9} className="animate-spin" /> Checking…</span>
-        ) : online.length === 0 ? (
-          <span className="text-[10px] text-amber-500">No stations online</span>
-        ) : (
-          online.map(s => (
-            <button key={s} onClick={() => setSuffix(s)}
-              className={clsx('px-2.5 py-1 rounded text-[10px] font-mono border transition-colors',
-                suffix === s ? 'bg-blue-600 border-blue-500 text-white' : 'bg-[var(--c-depth)] border-[var(--c-border)] text-gray-400 hover:border-[var(--c-border2)] hover:text-gray-300'
-              )}>
-              {depIcao}_{s}
-            </button>
-          ))
-        )}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {(online.length > 0 ? online : [depIcao]).map(s => (
+          <button key={s} onClick={() => setSuffix(s)}
+            className={clsx('px-2.5 py-1 rounded text-[10px] font-mono border transition-colors',
+              suffix === s
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-green-500/10 border-green-500/40 text-green-400 hover:bg-green-500/20'
+            )}>
+            {s}
+          </button>
+        ))}
       </div>
       <div className="flex gap-2">
         <Inp value={atis} onChange={setAtis} placeholder="ATIS e.g. A" className="w-28 shrink-0" maxLength={1} />
@@ -202,92 +263,96 @@ function DAtisForm({ airports, hoppieLogon, callsign, atisNetwork, onSend, onInj
   onSend: (to: string, pkt: string) => Promise<void>;
   onInject: (msg: HoppieMessage) => void;
 }) {
-  type AtisSource = 'hoppie' | 'network' | null; // null = offline everywhere
-  const [sources, setSources] = useState<Record<string, AtisSource> | null>(null);
+  // hoppieStations: all Hoppie ATIS stations found per airport
+  // networkAvail: airports available via VATSIM/IVAO API
+  const [hoppieStations, setHoppieStations] = useState<Record<string, string[]> | null>(null);
+  const [networkStations, setNetworkStations] = useState<Record<string, ATISResult[]>>({});
   const [sending, setSending] = useState<string | null>(null);
 
   useEffect(() => {
-    setSources(null);
-    const fetchFn = atisNetwork === 'ivao' ? fetchIvaoATIS : fetchVatsimATIS;
+    setHoppieStations(null);
     Promise.all(
       airports.map(async icao => {
-        const [onHoppie, networkResult] = await Promise.all([
-          hoppieStationOnline(hoppieLogon, callsign, `${icao}_ATIS`),
-          fetchFn(icao).then(r => !!(r && r.lines.length > 0)).catch(() => false),
+        const [hoppie, network] = await Promise.all([
+          hoppieOnlineStations(icao).then(s => s.filter(x => x.includes('ATIS'))),
+          (atisNetwork === 'ivao' ? fetchAllIvaoATIS : fetchAllVatsimATIS)(icao).catch(() => [] as ATISResult[]),
         ]);
-        const source: AtisSource = onHoppie ? 'hoppie' : networkResult ? 'network' : null;
-        return [icao, source] as [string, AtisSource];
+        return { icao, hoppie, network };
       })
-    ).then(results => setSources(Object.fromEntries(results)));
+    ).then(results => {
+      setHoppieStations(Object.fromEntries(results.map(r => [r.icao, r.hoppie])));
+      setNetworkStations(Object.fromEntries(results.map(r => [r.icao, r.network])));
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [airports.join(','), hoppieLogon, callsign, atisNetwork]);
 
-  async function request(icao: string) {
+  async function requestHoppie(station: string) {
+    setSending(station);
+    await onSend(station, 'REQUEST ATIS');
+    setSending(null);
+  }
+
+  async function requestNetwork(icao: string) {
     setSending(icao);
-    if (sources?.[icao] === 'hoppie') {
-      // Station active on Hoppie — send real request, response comes via poll
-      await onSend(`${icao}_ATIS`, 'REQUEST ATIS');
-    } else {
-      // Fallback: fetch from VATSIM/IVAO API and inject as received message
-      try {
-        const fetchFn = atisNetwork === 'ivao' ? fetchIvaoATIS : fetchVatsimATIS;
-        const result = await fetchFn(icao);
-        if (result && result.lines.length > 0) {
+    try {
+      const fetchFn = atisNetwork === 'ivao' ? fetchAllIvaoATIS : fetchAllVatsimATIS;
+      const results = await fetchFn(icao);
+      if (results.length > 0) {
+        results.forEach(result => {
           const infoLine = result.code ? `INFORMATION ${result.code}\n` : '';
-          onInject({
-            from: `${icao}_ATIS`,
-            type: 'telex',
-            packet: infoLine + result.lines.join('\n'),
-            receivedAt: new Date(),
-          });
-        } else {
-          onInject({
-            from: `${icao}_ATIS`,
-            type: 'telex',
-            packet: `No ATIS available for ${icao} on ${atisNetwork.toUpperCase()}`,
-            receivedAt: new Date(),
-          });
-        }
-      } catch {
-        onInject({
-          from: `${icao}_ATIS`,
-          type: 'telex',
-          packet: `Failed to fetch ATIS for ${icao}`,
-          receivedAt: new Date(),
+          onInject({ from: result.callsign, type: 'telex', packet: infoLine + result.lines.join('\n'), receivedAt: new Date() });
         });
+      } else {
+        onInject({ from: `${icao}_ATIS`, type: 'telex', packet: `No ATIS available for ${icao} on ${atisNetwork.toUpperCase()}`, receivedAt: new Date() });
       }
+    } catch {
+      onInject({ from: `${icao}_ATIS`, type: 'telex', packet: `Failed to fetch ATIS for ${icao}`, receivedAt: new Date() });
     }
     setSending(null);
   }
 
   const networkLabel = atisNetwork.toUpperCase();
+  const hasAny = hoppieStations && airports.some(icao =>
+    (hoppieStations[icao]?.length ?? 0) > 0 || (networkStations[icao]?.length ?? 0) > 0
+  );
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <span className="text-[10px] text-gray-500 shrink-0">D-ATIS:</span>
-      {sources === null ? (
+      {hoppieStations === null ? (
         <span className="flex items-center gap-1 text-[10px] text-gray-600">
           <Loader2 size={9} className="animate-spin" /> Checking…
         </span>
       ) : (
         <>
-          {airports.filter(icao => sources![icao] !== null).map(icao => {
-            const src = sources![icao]!;
-            return (
-              <button key={icao} onClick={() => request(icao)} disabled={sending === icao}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--c-depth)] border border-[var(--c-border)] hover:border-blue-500/50 hover:text-white text-gray-400 rounded-lg text-xs font-mono transition-colors disabled:opacity-50"
-                title={src === 'hoppie' ? 'Via Hoppie' : `Via ${networkLabel} API`}>
-                {sending === icao
-                  ? <Loader2 size={11} className="animate-spin" />
-                  : <Wifi size={11} className={src === 'hoppie' ? 'text-green-400' : 'text-gray-500'} />}
-                {icao}
-                <span className="text-[9px] text-gray-600">{src === 'hoppie' ? 'HPP' : networkLabel}</span>
-              </button>
+          {airports.flatMap(icao => {
+            const hpp = hoppieStations[icao] ?? [];
+            // Network stations not already covered by a Hoppie station
+            const net = (networkStations[icao] ?? []).filter(r =>
+              !hpp.some(h => h.toUpperCase() === r.callsign.toUpperCase())
             );
+            return [
+              ...hpp.map(station => (
+                <button key={station} onClick={() => requestHoppie(station)} disabled={sending === station}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--c-depth)] border border-[var(--c-border)] hover:border-blue-500/50 hover:text-white text-gray-400 rounded-lg text-xs font-mono transition-colors disabled:opacity-50"
+                  title="Via Hoppie">
+                  {sending === station ? <Loader2 size={11} className="animate-spin" /> : <Wifi size={11} className="text-green-400" />}
+                  {station}
+                  <span className="text-[9px] text-gray-600">HPP</span>
+                </button>
+              )),
+              ...net.map(result => (
+                <button key={result.callsign} onClick={() => requestNetwork(icao)} disabled={sending === result.callsign}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--c-depth)] border border-[var(--c-border)] hover:border-blue-500/50 hover:text-white text-gray-400 rounded-lg text-xs font-mono transition-colors disabled:opacity-50"
+                  title={`Via ${networkLabel}`}>
+                  {sending === result.callsign ? <Loader2 size={11} className="animate-spin" /> : <Wifi size={11} className="text-gray-500" />}
+                  {result.callsign}
+                  <span className="text-[9px] text-gray-600">{networkLabel}</span>
+                </button>
+              )),
+            ];
           })}
-          {airports.every(icao => sources![icao] === null) && (
-            <span className="text-[10px] text-amber-500">No ATIS available</span>
-          )}
+          {!hasAny && <span className="text-[10px] text-amber-500">No ATIS available</span>}
         </>
       )}
     </div>
@@ -319,9 +384,7 @@ function OceanicForm({ atcCallsign, acType, destIcao, cruiseFl, defaultMach, hop
 
   useEffect(() => {
     setOnlineCenters(null);
-    Promise.all(
-      OCEANIC_CENTERS.map(c => hoppieStationOnline(hoppieLogon, callsign, c.id))
-    ).then(results => {
+    Promise.all(OCEANIC_CENTERS.map(c => hoppieStationOnline(hoppieLogon, callsign, c.id))).then(results => {
       setOnlineCenters(OCEANIC_CENTERS.filter((_, i) => results[i]).map(c => c.id));
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -354,9 +417,7 @@ function OceanicForm({ atcCallsign, acType, destIcao, cruiseFl, defaultMach, hop
       <div className="flex items-center gap-1.5 flex-wrap">
         <span className="text-[10px] text-gray-500 shrink-0">Center:</span>
         {onlineCenters === null ? (
-          <span className="flex items-center gap-1 text-[10px] text-gray-600">
-            <Loader2 size={9} className="animate-spin" /> Checking…
-          </span>
+          <span className="flex items-center gap-1 text-[10px] text-gray-600"><Loader2 size={9} className="animate-spin" /> Checking…</span>
         ) : (
           OCEANIC_CENTERS.map(c => {
             const online = onlineCenters.includes(c.id);
@@ -364,11 +425,9 @@ function OceanicForm({ atcCallsign, acType, destIcao, cruiseFl, defaultMach, hop
               <button key={c.id} onClick={() => online && setCenter(c.id)} disabled={!online}
                 title={online ? c.id : `${c.id} — not online`}
                 className={clsx('px-2 py-1 rounded text-[10px] font-mono border transition-colors',
-                  !online
-                    ? 'bg-[var(--c-depth)] border-[var(--c-border)] text-gray-700 cursor-not-allowed'
-                    : center === c.id
-                      ? 'bg-blue-600 border-blue-500 text-white'
-                      : 'bg-[var(--c-depth)] border-[var(--c-border)] text-gray-400 hover:border-[var(--c-border2)] hover:text-gray-300'
+                  !online ? 'bg-[var(--c-depth)] border-[var(--c-border)] text-gray-700 cursor-not-allowed'
+                    : center === c.id ? 'bg-blue-600 border-blue-500 text-white'
+                    : 'bg-[var(--c-depth)] border-[var(--c-border)] text-gray-400 hover:border-[var(--c-border2)] hover:text-gray-300'
                 )}>
                 {c.label}
                 {online && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />}
@@ -379,16 +438,13 @@ function OceanicForm({ atcCallsign, acType, destIcao, cruiseFl, defaultMach, hop
         <Inp value={center} onChange={setCenter} placeholder="Custom e.g. EGGX_FSS" className="flex-1 min-w-36" />
       </div>
       <div className="flex gap-2 flex-wrap">
-        <Inp value={entry}   onChange={setEntry}   placeholder="Entry fix *"   className="w-32 shrink-0" />
-        <Inp value={time}    onChange={setTime}     placeholder={utcNow()}      className="w-24 shrink-0" />
-        <Inp value={level}   onChange={setLevel}    placeholder={cruiseFl}      className="w-20 shrink-0" />
-        <Inp value={mach}    onChange={setMach}     placeholder={defaultMach}   className="w-20 shrink-0" />
+        <Inp value={entry}   onChange={setEntry}   placeholder="Entry fix *"        className="w-32 shrink-0" />
+        <Inp value={time}    onChange={setTime}     placeholder={utcNow()}           className="w-24 shrink-0" />
+        <Inp value={level}   onChange={setLevel}    placeholder={cruiseFl}           className="w-20 shrink-0" />
+        <Inp value={mach}    onChange={setMach}     placeholder={defaultMach}        className="w-20 shrink-0" />
         <Inp value={ocRoute} onChange={setOcRoute}  placeholder="Track / Route (opt.)" className="flex-1 min-w-32" />
-        <button
-          onClick={submit}
-          disabled={sending || !center || !entry}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shrink-0"
-        >
+        <button onClick={submit} disabled={sending || !center || !entry}
+          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shrink-0">
           {sending ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
           Request
         </button>
@@ -402,12 +458,12 @@ function PositionForm({ callsign, destIcao, cruiseFl, onSend }: {
   callsign: string; destIcao: string; cruiseFl: string;
   onSend: (to: string, pkt: string) => Promise<void>;
 }) {
+  const { cpdlcStation, enrouteAtc, simPosition, ofp } = useEFBStore();
   const [fix, setFix] = useState('');
   const [alt, setAlt] = useState('');
   const [to, setTo] = useState('');
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState('');
-  const { cpdlcStation, enrouteAtc } = useEFBStore();
 
   useEffect(() => {
     if (!to) {
@@ -419,6 +475,30 @@ function PositionForm({ callsign, destIcao, cruiseFl, onSend }: {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cpdlcStation, enrouteAtc]);
+
+  // Auto-fill FL from sim
+  useEffect(() => {
+    if (simPosition && !alt) {
+      setAlt(`FL${Math.round(simPosition.altFt / 100)}`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simPosition]);
+
+  // Auto-fill ETA from sim groundspeed + distance to destination
+  function getAutoEta(): string {
+    if (!simPosition || !ofp) return '';
+    const destLat = parseFloat(ofp.destination.pos_lat);
+    const destLon = parseFloat(ofp.destination.pos_long);
+    if (!isFinite(destLat) || !isFinite(destLon) || simPosition.groundspeedKts < 10) return '';
+    const dLat = (destLat - simPosition.lat) * Math.PI / 180;
+    const dLon = (destLon - simPosition.lon) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(simPosition.lat * Math.PI / 180) * Math.cos(destLat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    const distNm = 2 * 3440.065 * Math.asin(Math.sqrt(a));
+    const etaMin = Math.round(distNm / simPosition.groundspeedKts * 60);
+    const eta = new Date(Date.now() + etaMin * 60000);
+    return eta.getUTCHours().toString().padStart(2, '0') + eta.getUTCMinutes().toString().padStart(2, '0') + 'Z';
+  }
 
   async function submit() {
     if (!fix || !alt || !to) return;
@@ -439,19 +519,23 @@ function PositionForm({ callsign, destIcao, cruiseFl, onSend }: {
     }
   }
 
+  const autoEta = getAutoEta();
+
   return (
-    <div className="flex gap-2 flex-wrap">
-      <Inp value={fix} onChange={setFix} placeholder="Fix / Waypoint *"  className="w-32 shrink-0" />
-      <Inp value={alt} onChange={setAlt} placeholder={cruiseFl + ' *'}   className="w-24 shrink-0" />
-      <Inp value={to}  onChange={setTo}  placeholder="ATC unit e.g. EDGG_CTR *" className="flex-1 min-w-36" />
-      <button
-        onClick={submit}
-        disabled={sending || !fix || !alt || !to}
-        className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shrink-0"
-      >
-        {sending ? <Loader2 size={12} className="animate-spin" /> : <Plane size={12} />}
-        Send
-      </button>
+    <div className="space-y-1.5">
+      <div className="flex gap-2 flex-wrap">
+        <Inp value={fix} onChange={setFix} placeholder="Fix / Waypoint *"          className="w-32 shrink-0" />
+        <Inp value={alt} onChange={setAlt} placeholder={cruiseFl + ' *'}           className="w-24 shrink-0" />
+        <Inp value={to}  onChange={setTo}  placeholder="ATC unit e.g. EDGG_CTR *" className="flex-1 min-w-36" />
+        <button onClick={submit} disabled={sending || !fix || !alt || !to}
+          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shrink-0">
+          {sending ? <Loader2 size={12} className="animate-spin" /> : <Plane size={12} />}
+          Send
+        </button>
+      </div>
+      {autoEta && (
+        <p className="text-[10px] text-blue-400 font-mono">Auto ETA {destIcao}: {autoEta} · FL auto-filled from sim</p>
+      )}
       {err && <p className="text-[10px] text-red-400 font-mono w-full">{err}</p>}
     </div>
   );
@@ -471,21 +555,20 @@ function LoadsheetForm({ callsign, depIcao, destIcao, acReg, acType, units,
   const totalPax = parseInt(paxCount) || 0;
   const halfPax  = Math.round(totalPax / 2);
 
-  const [to,       setTo]       = useState('OPENEFBOPS');
-  const [zfw,      setZfw]      = useState(estZfw);
-  const [tow,      setTow]      = useState(estTow);
-  const [ldw,      setLdw]      = useState(estLdw);
-  const [fuel,     setFuel]     = useState(planTakeoff || planRamp);
-  const [paxFwd,   setPaxFwd]   = useState(String(halfPax));
-  const [paxAft,   setPaxAft]   = useState(String(totalPax - halfPax));
-  const [cgMac,    setCgMac]    = useState('');
-  const [stab,     setStab]     = useState('');
-  const [sending,  setSending]  = useState(false);
-  const [err,      setErr]      = useState('');
+  const [to,      setTo]      = useState('OPSLINKOPS');
+  const [zfw,     setZfw]     = useState(estZfw);
+  const [tow,     setTow]     = useState(estTow);
+  const [ldw,     setLdw]     = useState(estLdw);
+  const [fuel,    setFuel]    = useState(planTakeoff || planRamp);
+  const [paxFwd,  setPaxFwd]  = useState(String(halfPax));
+  const [paxAft,  setPaxAft]  = useState(String(totalPax - halfPax));
+  const [cgMac,   setCgMac]   = useState('');
+  const [stab,    setStab]    = useState('');
+  const [sending, setSending] = useState(false);
+  const [err,     setErr]     = useState('');
 
   const u = units.toUpperCase() === 'LBS' ? 'LBS' : 'KG';
 
-  // Rough STAB TRIM from CG (generic — not type-specific)
   function stabFromCg(cgStr: string): string {
     const cg = parseFloat(cgStr);
     if (!isFinite(cg)) return '';
@@ -518,9 +601,8 @@ function LoadsheetForm({ callsign, depIcao, destIcao, acReg, acType, units,
     ].join('\n');
     try { await onSend(to, req); } catch (e) { setErr(e instanceof Error ? e.message : 'Send failed'); setSending(false); return; }
 
-    // Simulate final loadsheet response after 5 s
     setTimeout(() => {
-      const cgVal  = cgMac || '28.5';
+      const cgVal   = cgMac || '28.5';
       const stabVal = stab || stabFromCg(cgVal) || '3.0 UP';
       const underload = (() => {
         const mt = parseInt(maxTow); const et = parseInt(tow);
@@ -567,10 +649,10 @@ function LoadsheetForm({ callsign, depIcao, destIcao, acReg, acType, units,
         <div className="flex flex-col gap-1 shrink-0">
           <span className="text-[9px] text-gray-600 uppercase tracking-wide">Weights ({u})</span>
           <div className="flex gap-1.5">
-            <Inp value={zfw}  onChange={setZfw}  placeholder={`ZFW`}     className="w-24" />
-            <Inp value={tow}  onChange={setTow}  placeholder={`TOW`}     className="w-24" />
-            <Inp value={ldw}  onChange={setLdw}  placeholder={`LDW`}     className="w-24" />
-            <Inp value={fuel} onChange={setFuel} placeholder={`T/O Fuel`} className="w-24" />
+            <Inp value={zfw}  onChange={setZfw}  placeholder="ZFW"       className="w-24" />
+            <Inp value={tow}  onChange={setTow}  placeholder="TOW"       className="w-24" />
+            <Inp value={ldw}  onChange={setLdw}  placeholder="LDW"       className="w-24" />
+            <Inp value={fuel} onChange={setFuel} placeholder="T/O Fuel"  className="w-24" />
           </div>
         </div>
       </div>
@@ -587,7 +669,7 @@ function LoadsheetForm({ callsign, depIcao, destIcao, acReg, acType, units,
         <div className="flex flex-col gap-1 shrink-0">
           <span className="text-[9px] text-gray-600 uppercase tracking-wide">Balance</span>
           <div className="flex gap-1.5">
-            <Inp value={cgMac} onChange={handleCgChange} placeholder="CG % MAC" className="w-24" />
+            <Inp value={cgMac} onChange={handleCgChange} placeholder="CG % MAC"  className="w-24" />
             <Inp value={stab}  onChange={setStab}        placeholder="STAB TRIM" className="w-28" />
           </div>
         </div>
@@ -605,9 +687,6 @@ function LoadsheetForm({ callsign, depIcao, destIcao, acReg, acType, units,
   );
 }
 
-
-
-// ── Helper: epoch-based UTC time with offset minutes ──────────────────────────
 function utcPlus(offsetMin: number): string {
   const d = new Date(Date.now() + offsetMin * 60000);
   return d.toUTCString().slice(17, 22) + 'Z';
@@ -621,14 +700,12 @@ function OpsForm({ callsign, depIcao, destIcao, acReg, acType, units, fuelOnboar
 }) {
   type SubMode = 'slot' | 'diff' | 'acchange' | 'torpt';
   const [sub, setSub] = useState<SubMode>('slot');
+  const defaultOps = 'OPSLINKOPS';
 
-  const defaultOps = 'OPENEFBOPS';
-
-  // ── Slot Request ────────────────────────────────────────────────────────────
-  const [slotTo, setSlotTo]       = useState(defaultOps);
+  const [slotTo, setSlotTo]         = useState(defaultOps);
   const [slotReason, setSlotReason] = useState('');
-  const [slotBusy, setSlotBusy]   = useState(false);
-  const [slotOk, setSlotOk]       = useState(false);
+  const [slotBusy, setSlotBusy]     = useState(false);
+  const [slotOk, setSlotOk]         = useState(false);
 
   async function sendSlotRequest() {
     setSlotBusy(true);
@@ -641,23 +718,14 @@ function OpsForm({ callsign, depIcao, destIcao, acReg, acType, units, fuelOnboar
       'REQUEST CTOT CONFIRMATION',
     ];
     try { await onSend(slotTo, lines.join('\n')); } catch { /* ignore */ }
-    // Simulate CTOT response after 4 s
     setTimeout(() => {
-      const ctot = utcPlus(18);
-      const from = utcPlus(12);
-      const to   = utcPlus(23);
+      const ctot = utcPlus(18); const from = utcPlus(12); const to = utcPlus(23);
       onInject({
-        from: slotTo,
-        type: 'telex',
-        packet: [
-          'SLOT NOTIFICATION',
-          `FLIGHT ${callsign}  ${depIcao}-${destIcao}`,
-          `CTOT ${ctot}`,
-          `VALID ${from}-${to}`,
-          'REASON ATFM FLOW RESTRICTION',
+        from: slotTo, type: 'telex',
+        packet: ['SLOT NOTIFICATION', `FLIGHT ${callsign}  ${depIcao}-${destIcao}`,
+          `CTOT ${ctot}`, `VALID ${from}-${to}`, 'REASON ATFM FLOW RESTRICTION',
           `ATM REF ${depIcao.slice(0,2)}${Math.floor(Math.random() * 9000 + 1000)}`,
-          'ACKNOWLEDGE WHEN READY',
-        ].join('\n'),
+          'ACKNOWLEDGE WHEN READY'].join('\n'),
         receivedAt: new Date(),
       });
     }, 4000);
@@ -665,27 +733,20 @@ function OpsForm({ callsign, depIcao, destIcao, acReg, acType, units, fuelOnboar
     setSlotBusy(false);
   }
 
-  // ── COMP Related Difficulties ───────────────────────────────────────────────
-  const [diffTo, setDiffTo]     = useState(defaultOps);
-  const [diffType, setDiffType] = useState('');
-  const [diffMel, setDiffMel]   = useState('');
+  const [diffTo, setDiffTo]         = useState(defaultOps);
+  const [diffType, setDiffType]     = useState('');
+  const [diffMel, setDiffMel]       = useState('');
   const [diffStatus, setDiffStatus] = useState('AIRWORTHY WITH RESTRICTION');
-  const [diffBusy, setDiffBusy] = useState(false);
-  const [diffOk, setDiffOk]     = useState(false);
-  const [diffErr, setDiffErr]   = useState('');
+  const [diffBusy, setDiffBusy]     = useState(false);
+  const [diffOk, setDiffOk]         = useState(false);
+  const [diffErr, setDiffErr]       = useState('');
 
   async function sendDiff() {
     if (!diffType) return;
     setDiffBusy(true); setDiffErr('');
-    const lines = [
-      'COMP RLTD DIFFICULTIES',
-      `FLIGHT ${callsign}  ${depIcao}-${destIcao}`,
-      `AIRCRAFT ${acReg}  ${acType}`,
-      `DIFFICULTY  ${diffType}`,
-      `STATUS      ${diffStatus}`,
-      ...(diffMel ? [`MEL REF     ${diffMel}`] : []),
-      'ADVISE IF FURTHER ACTION REQUIRED',
-    ];
+    const lines = ['COMP RLTD DIFFICULTIES', `FLIGHT ${callsign}  ${depIcao}-${destIcao}`,
+      `AIRCRAFT ${acReg}  ${acType}`, `DIFFICULTY  ${diffType}`, `STATUS      ${diffStatus}`,
+      ...(diffMel ? [`MEL REF     ${diffMel}`] : []), 'ADVISE IF FURTHER ACTION REQUIRED'];
     try {
       await onSend(diffTo, lines.join('\n'));
       setDiffOk(true); setTimeout(() => setDiffOk(false), 2000);
@@ -693,7 +754,6 @@ function OpsForm({ callsign, depIcao, destIcao, acReg, acType, units, fuelOnboar
     finally { setDiffBusy(false); }
   }
 
-  // ── Possible AC Change ──────────────────────────────────────────────────────
   const [acTo, setAcTo]         = useState(defaultOps);
   const [acReason, setAcReason] = useState('');
   const [acNewReg, setAcNewReg] = useState('');
@@ -704,14 +764,10 @@ function OpsForm({ callsign, depIcao, destIcao, acReg, acType, units, fuelOnboar
   async function sendAcChange() {
     if (!acReason) return;
     setAcBusy(true); setAcErr('');
-    const lines = [
-      'POSSIBLE AC CHANGE',
-      `FLIGHT ${callsign}  ${depIcao}-${destIcao}`,
-      `CURRENT AC  ${acReg}  ${acType}`,
-      `REASON      ${acReason}`,
+    const lines = ['POSSIBLE AC CHANGE', `FLIGHT ${callsign}  ${depIcao}-${destIcao}`,
+      `CURRENT AC  ${acReg}  ${acType}`, `REASON      ${acReason}`,
       ...(acNewReg ? [`PROPOSED    ${acNewReg}  ${acType}`] : []),
-      'PLEASE ADVISE AVAILABILITY AND READY TIME',
-    ];
+      'PLEASE ADVISE AVAILABILITY AND READY TIME'];
     try {
       await onSend(acTo, lines.join('\n'));
       setAcOk(true); setTimeout(() => setAcOk(false), 2000);
@@ -719,30 +775,24 @@ function OpsForm({ callsign, depIcao, destIcao, acReg, acType, units, fuelOnboar
     finally { setAcBusy(false); }
   }
 
-  // ── Takeoff Report ──────────────────────────────────────────────────────────
-  const [toTo, setToTo]     = useState(defaultOps);
-  const [toRwy, setToRwy]   = useState('');
-  const [toFob, setToFob]   = useState(fuelOnboard);
-  const [toEta, setToEta]   = useState('');
-  const [toPax, setToPax]   = useState('');
+  const [toTo, setToTo]   = useState(defaultOps);
+  const [toRwy, setToRwy] = useState('');
+  const [toFob, setToFob] = useState(fuelOnboard);
+  const [toEta, setToEta] = useState('');
+  const [toPax, setToPax] = useState('');
   const [toBusy, setToBusy] = useState(false);
-  const [toOk, setToOk]     = useState(false);
-  const [toErr, setToErr]   = useState('');
+  const [toOk, setToOk]   = useState(false);
+  const [toErr, setToErr] = useState('');
 
   async function sendToReport() {
     if (!toRwy) return;
     setToBusy(true); setToErr('');
     const u = units.toUpperCase() === 'LBS' ? 'LBS' : 'KG';
-    const lines = [
-      'TAKEOFF REPORT',
-      `FLIGHT ${callsign}  ${depIcao}-${destIcao}`,
-      `AIRCRAFT ${acReg}  ${acType}`,
-      `DEP RUNWAY  ${toRwy}`,
-      `T/O TIME    ${utcNow()}`,
+    const lines = ['TAKEOFF REPORT', `FLIGHT ${callsign}  ${depIcao}-${destIcao}`,
+      `AIRCRAFT ${acReg}  ${acType}`, `DEP RUNWAY  ${toRwy}`, `T/O TIME    ${utcNow()}`,
       ...(toFob ? [`FOB         ${toFob} ${u}`] : []),
       ...(toEta ? [`ETA DEST    ${toEta}`] : []),
-      ...(toPax ? [`PAX         ${toPax}`] : []),
-    ];
+      ...(toPax ? [`PAX         ${toPax}`] : [])];
     try {
       await onSend(toTo, lines.join('\n'));
       setToOk(true); setTimeout(() => setToOk(false), 2000);
@@ -750,31 +800,24 @@ function OpsForm({ callsign, depIcao, destIcao, acReg, acType, units, fuelOnboar
     finally { setToBusy(false); }
   }
 
-  // ── Sub-tab config ──────────────────────────────────────────────────────────
   const SUB_TABS: { id: SubMode; label: string }[] = [
-    { id: 'slot',     label: 'Slot/CTOT' },
-    { id: 'diff',     label: 'COMP Diff' },
-    { id: 'acchange', label: 'AC Change' },
-    { id: 'torpt',    label: 'T/O Report' },
+    { id: 'slot', label: 'Slot/CTOT' }, { id: 'diff', label: 'COMP Diff' },
+    { id: 'acchange', label: 'AC Change' }, { id: 'torpt', label: 'T/O Report' },
   ];
 
   return (
     <div className="space-y-2">
-      {/* Sub-tab row */}
       <div className="flex gap-1 flex-wrap">
         {SUB_TABS.map(t => (
           <button key={t.id} onClick={() => setSub(t.id)}
             className={clsx('px-2.5 py-1 rounded text-[10px] font-mono border transition-colors',
-              sub === t.id
-                ? 'bg-blue-600 border-blue-500 text-white'
-                : 'bg-[var(--c-depth)] border-[var(--c-border)] text-gray-400 hover:border-[var(--c-border2)] hover:text-gray-300'
+              sub === t.id ? 'bg-blue-600 border-blue-500 text-white' : 'bg-[var(--c-depth)] border-[var(--c-border)] text-gray-400 hover:border-[var(--c-border2)] hover:text-gray-300'
             )}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* ── Slot / CTOT ─────────────────────────────────────────────────────── */}
       {sub === 'slot' && (
         <div className="space-y-1.5">
           <p className="text-[10px] text-gray-500">Request CTOT from ops — simulated slot notification returned automatically.</p>
@@ -789,14 +832,12 @@ function OpsForm({ callsign, depIcao, destIcao, acReg, acType, units, fuelOnboar
           </div>
         </div>
       )}
-
-      {/* ── COMP Related Difficulties ────────────────────────────────────────── */}
       {sub === 'diff' && (
         <div className="space-y-1.5">
           <div className="flex gap-2 flex-wrap">
-            <Inp value={diffType}   onChange={setDiffType}   placeholder="Difficulty description *" className="flex-1 min-w-48" />
-            <Inp value={diffMel}    onChange={setDiffMel}    placeholder="MEL ref (opt.)"            className="w-28 shrink-0" />
-            <Inp value={diffStatus} onChange={setDiffStatus} placeholder="Status"                    className="w-48 shrink-0" />
+            <Inp value={diffType}   onChange={setDiffType}   placeholder="Difficulty *"   className="flex-1 min-w-48" />
+            <Inp value={diffMel}    onChange={setDiffMel}    placeholder="MEL ref (opt.)" className="w-28 shrink-0" />
+            <Inp value={diffStatus} onChange={setDiffStatus} placeholder="Status"         className="w-48 shrink-0" />
           </div>
           <div className="flex gap-2">
             <Inp value={diffTo} onChange={setDiffTo} placeholder="Ops station" className="flex-1" />
@@ -809,13 +850,11 @@ function OpsForm({ callsign, depIcao, destIcao, acReg, acType, units, fuelOnboar
           {diffErr && <p className="text-[10px] text-red-400 font-mono">{diffErr}</p>}
         </div>
       )}
-
-      {/* ── Possible AC Change ───────────────────────────────────────────────── */}
       {sub === 'acchange' && (
         <div className="space-y-1.5">
           <div className="flex gap-2 flex-wrap">
-            <Inp value={acReason} onChange={setAcReason} placeholder="Reason * e.g. MEL AOG" className="flex-1 min-w-40" />
-            <Inp value={acNewReg} onChange={setAcNewReg} placeholder="Proposed reg (opt.)"   className="w-36 shrink-0" />
+            <Inp value={acReason} onChange={setAcReason} placeholder="Reason * e.g. MEL AOG"  className="flex-1 min-w-40" />
+            <Inp value={acNewReg} onChange={setAcNewReg} placeholder="Proposed reg (opt.)"     className="w-36 shrink-0" />
           </div>
           <div className="flex gap-2">
             <Inp value={acTo} onChange={setAcTo} placeholder="Ops station" className="flex-1" />
@@ -828,15 +867,13 @@ function OpsForm({ callsign, depIcao, destIcao, acReg, acType, units, fuelOnboar
           {acErr && <p className="text-[10px] text-red-400 font-mono">{acErr}</p>}
         </div>
       )}
-
-      {/* ── Takeoff Report ───────────────────────────────────────────────────── */}
       {sub === 'torpt' && (
         <div className="space-y-1.5">
           <div className="flex gap-2 flex-wrap">
-            <Inp value={toRwy} onChange={setToRwy} placeholder="Runway * e.g. 25R" className="w-28 shrink-0" />
-            <Inp value={toFob} onChange={setToFob} placeholder={`FOB (${units})`}   className="w-32 shrink-0" />
+            <Inp value={toRwy} onChange={setToRwy} placeholder="Runway * e.g. 25R"   className="w-28 shrink-0" />
+            <Inp value={toFob} onChange={setToFob} placeholder={`FOB (${units})`}    className="w-32 shrink-0" />
             <Inp value={toEta} onChange={setToEta} placeholder="ETA dest e.g. 1534Z" className="w-32 shrink-0" />
-            <Inp value={toPax} onChange={setToPax} placeholder="PAX (opt.)"          className="w-24 shrink-0" />
+            <Inp value={toPax} onChange={setToPax} placeholder="PAX (opt.)"           className="w-24 shrink-0" />
           </div>
           <div className="flex gap-2">
             <Inp value={toTo} onChange={setToTo} placeholder="Ops station" className="flex-1" />
@@ -863,20 +900,19 @@ function CpdlcForm({ callsign, onSend }: {
   const [pendingMsgId, setPendingMsgId] = useState('');
   const [logonError, setLogonError] = useState('');
 
-  // Consume logon intent from Map page
   useEffect(() => {
     if (pendingCpdlcLogon) {
       setStationInput(pendingCpdlcLogon);
       setPendingCpdlcLogon(null);
     }
   }, [pendingCpdlcLogon, setPendingCpdlcLogon]);
+
   const [requestType, setRequestType] = useState<'climb' | 'descent' | 'direct' | 'custom'>('custom');
   const [alt, setAlt] = useState('');
   const [fix, setFix] = useState('');
   const [custom, setCustom] = useState('');
   const [sending, setSending] = useState(false);
 
-  // Watch for logon response
   useEffect(() => {
     if (!pendingMsgId) return;
     const reply = acarsMessages.find(m =>
@@ -888,13 +924,10 @@ function CpdlcForm({ callsign, onSend }: {
     const negative = ['UNABLE', 'REJECTED', 'DENIED'].some(k => content.includes(k));
     if (positive) {
       setCpdlcStation(pendingStation);
-      setPendingStation('');
-      setPendingMsgId('');
-      setLogonError('');
+      setPendingStation(''); setPendingMsgId(''); setLogonError('');
     } else if (negative) {
       setLogonError(`Logon rejected: ${reply.cpdlc.content}`);
-      setPendingStation('');
-      setPendingMsgId('');
+      setPendingStation(''); setPendingMsgId('');
     }
   }, [acarsMessages, pendingMsgId, pendingStation, setCpdlcStation]);
 
@@ -903,9 +936,7 @@ function CpdlcForm({ callsign, onSend }: {
     setLogonError('');
     const id = nextCpdlcMsgId();
     await onSend(stationInput, 'cpdlc', buildCpdlcPacket(id, '', `LOGON ${callsign}`));
-    setPendingStation(stationInput);
-    setPendingMsgId(String(id));
-    setStationInput('');
+    setPendingStation(stationInput); setPendingMsgId(String(id)); setStationInput('');
   }
 
   async function logoff() {
@@ -920,9 +951,9 @@ function CpdlcForm({ callsign, onSend }: {
     setSending(true);
     const id = nextCpdlcMsgId();
     let content = '';
-    if (requestType === 'climb') content = `REQUEST CLIMB TO ${alt.replace(/^FL?/, 'FL')}`;
+    if (requestType === 'climb')   content = `REQUEST CLIMB TO ${alt.replace(/^FL?/, 'FL')}`;
     else if (requestType === 'descent') content = `REQUEST DESCENT TO ${alt.replace(/^FL?/, 'FL')}`;
-    else if (requestType === 'direct') content = `REQUEST DIRECT TO ${fix}`;
+    else if (requestType === 'direct')  content = `REQUEST DIRECT TO ${fix}`;
     else content = custom;
     if (!content) { setSending(false); return; }
     await onSend(cpdlcStation, 'cpdlc', buildCpdlcPacket(id, '', content));
@@ -932,7 +963,6 @@ function CpdlcForm({ callsign, onSend }: {
 
   return (
     <div className="space-y-2">
-      {/* Logon status */}
       <div className="flex items-center gap-2 flex-wrap">
         {cpdlcStation ? (
           <>
@@ -962,32 +992,24 @@ function CpdlcForm({ callsign, onSend }: {
           </>
         )}
       </div>
-      {/* Enroute CTR suggestions */}
       {!cpdlcStation && !pendingStation && enrouteAtc.filter(c => c.facility === 6).length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] text-gray-500 shrink-0">Enroute:</span>
           {enrouteAtc.filter(c => c.facility === 6).map(c => (
-            <button
-              key={c.callsign}
-              onClick={() => setStationInput(c.callsign)}
-              className={clsx(
-                'flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-mono border transition-colors',
+            <button key={c.callsign} onClick={() => setStationInput(c.callsign)}
+              className={clsx('flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-mono border transition-colors',
                 stationInput === c.callsign
                   ? 'bg-purple-600/20 border-purple-500/40 text-purple-200'
                   : 'bg-[var(--c-depth)] border-[var(--c-border)] text-purple-300 hover:border-purple-500/40 hover:bg-purple-500/10',
               )}
-              title={`${c.frequency} MHz · near ${c.matchedFixIdent}`}
-            >
+              title={`${c.frequency} MHz · near ${c.matchedFixIdent}`}>
               {c.callsign}
               <span className="text-gray-500">{c.frequency}</span>
             </button>
           ))}
         </div>
       )}
-      {logonError && (
-        <p className="text-[10px] text-red-400">{logonError}</p>
-      )}
-      {/* Request form (only when logged on) */}
+      {logonError && <p className="text-[10px] text-red-400">{logonError}</p>}
       {cpdlcStation && (
         <>
           <div className="flex gap-1.5 flex-wrap">
@@ -1030,6 +1052,9 @@ export default function AcarsPage() {
     acarsMessages, addAcarsMessage, cpdlcStation, nextCpdlcMsgId,
     hoppieConnected, hoppiePolling, hoppieError,
     simPosition, incrementAcarsUnread,
+    soundEnabled, setSoundEnabled,
+    pendingCpdlcLogon,
+    activeLogbookEntryId, updateLogbookEntry, closeLogbookEntry,
   } = useEFBStore();
   const callsign = ofp?.atc?.callsign ?? '';
   const autoAtisRef = useRef<Set<string>>(new Set());
@@ -1038,12 +1063,18 @@ export default function AcarsPage() {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [respondedIdx, setRespondedIdx] = useState<Set<number>>(new Set());
   const [inlineReply, setInlineReply] = useState<{ idx: number; fob: string; fl: string; eta: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [acarsMessages]);
+
+  // Auto-switch to CPDLC mode when triggered from Map page
+  useEffect(() => {
+    if (pendingCpdlcLogon) setMode('cpdlc');
+  }, [pendingCpdlcLogon]);
 
   async function sendMsg(to: string, type: string, packet: string) {
     await hoppieSend(hoppieLogon, callsign, to, type, packet);
@@ -1068,7 +1099,17 @@ export default function AcarsPage() {
     s.setHoppiePolling(true);
     try {
       const msgs = await hoppiePoll(s.hoppieLogon, cs);
-      if (msgs.length > 0) msgs.forEach(m => s.addAcarsMessage(m));
+      if (msgs.length > 0) {
+        msgs.forEach(m => {
+          s.addAcarsMessage(m);
+          if (s.soundEnabled) {
+            if (m.type === 'cpdlc') playCpdlcChime();
+            else if (m.from?.endsWith('_ATIS') || m.from === 'OPSLINKOPS') playOpsBeep();
+            else playIncomingBeep();
+          }
+        });
+        s.incrementAcarsUnread();
+      }
       s.setHoppieError(null);
     } catch {
       s.setHoppieError('Poll failed');
@@ -1098,19 +1139,22 @@ export default function AcarsPage() {
       <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-500">
         <MessageSquare size={40} />
         <p className="text-sm">No flight plan loaded — callsign required for ACARS.</p>
+        <button onClick={() => setActivePage('dashboard')} className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+          Load OFP on Dashboard →
+        </button>
       </div>
     );
   }
 
-  const depIcao   = ofp.origin.icao_code;
-  const destIcao  = ofp.destination.icao_code;
-  const altnIcao  = ofp.alternate?.icao_code ?? '';
-  const atcCs     = ofp.atc.callsign;
-  const acType    = ofp.aircraft.icaocode;
-  const route     = ofp.general.route;
-  const cruiseFl  = `FL${Math.round(parseInt(ofp.general.initial_altitude || '0') / 100)}`;
-  const defMach   = ofp.aircraft.cruise_tas ? `M${(parseInt(ofp.aircraft.cruise_tas) / 480).toFixed(2)}` : 'M0.82';
-  const airports  = [depIcao, destIcao, ...(altnIcao ? [altnIcao] : [])];
+  const depIcao  = ofp.origin.icao_code;
+  const destIcao = ofp.destination.icao_code;
+  const altnIcao = ofp.alternate?.icao_code ?? '';
+  const atcCs    = ofp.atc.callsign;
+  const acType   = ofp.aircraft.icaocode;
+  const route    = ofp.general.route;
+  const cruiseFl = `FL${Math.round(parseInt(ofp.general.initial_altitude || '0') / 100)}`;
+  const defMach  = ofp.aircraft.cruise_tas ? `M${(parseInt(ofp.aircraft.cruise_tas) / 480).toFixed(2)}` : 'M0.82';
+  const airports = [depIcao, destIcao, ...(altnIcao ? [altnIcao] : [])];
   const fuelUnits = ofp.general.units?.toUpperCase() === 'LBS' ? 'LBS' : 'KG';
 
   // ── Auto D-ATIS when < 200 NM from destination ────────────────────────────
@@ -1134,6 +1178,7 @@ export default function AcarsPage() {
           const packet = `[AUTO D-ATIS]\n${infoLine}${result.lines.join('\n')}`;
           addAcarsMessage({ from: `${destIcao}_ATIS`, type: 'telex', packet, receivedAt: new Date() });
           incrementAcarsUnread();
+          if (soundEnabled) playOpsBeep();
           if (hoppieLogon && callsign) {
             hoppieSend(hoppieLogon, `${destIcao}_ATIS`, callsign, 'telex', packet).catch(() => {});
           }
@@ -1149,7 +1194,7 @@ export default function AcarsPage() {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const firedRef  = useRef<Set<string>>(new Set());
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const opsCallsign = useRef<string>('OPENEFBOPS');
+  const opsCallsign = useRef<string>('OPSLINKOPS');
 
   function nmBetween(lat1: number, lon1: number, lat2: number, lon2: number) {
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -1162,7 +1207,7 @@ export default function AcarsPage() {
   function injectOps(packet: string) {
     addAcarsMessage({ from: opsCallsign.current, type: 'telex', packet, receivedAt: new Date() });
     incrementAcarsUnread();
-    // Send via Hoppie so aircraft ACARS (Fenix, PMDG etc.) receives it on MCDU
+    if (soundEnabled) playOpsBeep();
     if (hoppieLogon && callsign) {
       hoppieSend(hoppieLogon, opsCallsign.current, callsign, 'telex', packet).catch(() => {});
     }
@@ -1180,14 +1225,13 @@ export default function AcarsPage() {
     const distToDest   = isFinite(destLat) ? nmBetween(simPosition.lat, simPosition.lon, destLat, destLon) : 999;
     const distToOrigin = isFinite(depLat)  ? nmBetween(simPosition.lat, simPosition.lon, depLat, depLon)   : 999;
 
-    // Determine current phase
     let phase: string;
     if (altFt < 800 && groundspeedKts < 5) {
       phase = distToOrigin < distToDest ? 'preflight' : 'on_block';
     } else if (altFt < 800 && groundspeedKts >= 5 && groundspeedKts < 80) {
       phase = distToOrigin < distToDest ? 'taxi_out' : 'taxi_in';
     } else if (altFt < 800 && groundspeedKts >= 80) {
-      phase = 'takeoff_roll'; // transitional, no message
+      phase = 'takeoff_roll';
     } else if (altFt >= 800 && verticalSpeedFpm > 300) {
       phase = 'climb';
     } else if (altFt >= 800 && verticalSpeedFpm < -500 && distToDest > 80) {
@@ -1197,12 +1241,30 @@ export default function AcarsPage() {
     } else if (altFt >= 10000 && Math.abs(verticalSpeedFpm) <= 300 && groundspeedKts > 150) {
       phase = 'cruise';
     } else {
-      phase = phaseRef.current; // keep current if ambiguous
+      phase = phaseRef.current;
     }
 
     const prev = phaseRef.current;
     if (phase === prev) return;
     phaseRef.current = phase;
+
+    // Update logbook phase history
+    if (activeLogbookEntryId) {
+      const s = useEFBStore.getState();
+      const entry = s.logbookEntries.find(e => e.id === activeLogbookEntryId);
+      if (entry) {
+        const phaseHistory = [...entry.phaseHistory, { phase, time: utcNow() }];
+        updateLogbookEntry(activeLogbookEntryId, { phaseHistory });
+        if (phase === 'taxi_out') updateLogbookEntry(activeLogbookEntryId, { offBlockUtc: utcNow() });
+        if (phase === 'on_block') {
+          updateLogbookEntry(activeLogbookEntryId, {
+            onBlockUtc: utcNow(),
+            simulator: (simPosition as { source?: 'msfs' | 'p3d' | 'xplane' }).source ?? null,
+          });
+          closeLogbookEntry();
+        }
+      }
+    }
 
     const cs  = ofp.atc.callsign;
     const dep = ofp.origin.icao_code;
@@ -1217,22 +1279,16 @@ export default function AcarsPage() {
     };
 
     if (phase === 'preflight') {
-      const pax     = ofp.weights.pax_count   ?? '—';
-      const bags    = ofp.weights.bag_count    ?? '—';
-      const payload = ofp.weights.payload      ?? '—';
-      const zfw     = ofp.weights.est_zfw      ?? '—';
-      const tow     = ofp.weights.est_tow      ?? '—';
-      const ramp    = ofp.fuel.plan_ramp       ?? '—';
       fire('pax_brief', [
         'PAX / LOAD BRIEF',
         `FLIGHT ${cs}  ${dep}-${dst}`,
         `AIRCRAFT ${acr}  ${acType}`,
-        `PAX               ${pax}`,
-        `BAGS              ${bags}`,
-        `PAYLOAD           ${payload} ${u}`,
-        `EST ZFW           ${zfw} ${u}`,
-        `EST TOW           ${tow} ${u}`,
-        `RAMP FUEL         ${ramp} ${u}`,
+        `PAX               ${ofp.weights.pax_count ?? '—'}`,
+        `BAGS              ${ofp.weights.bag_count ?? '—'}`,
+        `PAYLOAD           ${ofp.weights.payload ?? '—'} ${u}`,
+        `EST ZFW           ${ofp.weights.est_zfw ?? '—'} ${u}`,
+        `EST TOW           ${ofp.weights.est_tow ?? '—'} ${u}`,
+        `RAMP FUEL         ${ofp.fuel.plan_ramp ?? '—'} ${u}`,
         'LOADSHEET SIGNED — READY FOR BOARDING',
       ].join('\n'));
     }
@@ -1242,7 +1298,7 @@ export default function AcarsPage() {
         'DEPARTURE INFORMATION',
         `FLIGHT ${cs}  ${dep}-${dst}`,
         `AIRCRAFT ${acr}  ${acType}`,
-        `SLOT/CTOT AS FILED`,
+        'SLOT/CTOT AS FILED',
         'PRE-DEPARTURE CLEARANCE AVAILABLE ON REQUEST',
         'HAVE A SAFE DEPARTURE',
       ].join('\n'));
@@ -1262,15 +1318,13 @@ export default function AcarsPage() {
       fire('cruise_check', [
         'CRUISE CHECK REQUEST',
         `FLIGHT ${cs}  ${dep}-${dst}`,
-        `PLEASE REPORT:`,
+        'PLEASE REPORT:',
         `  FOB (${u})`,
-        `  CURRENT LEVEL`,
+        '  CURRENT LEVEL',
         `  ETA ${dst}`,
         'THANK YOU',
       ].join('\n'));
 
-      // CONNEX info (once, mid-cruise)
-      // ETA = remaining distance / groundspeed in minutes
       const etaMin = groundspeedKts > 0 ? Math.round(distToDest / groundspeedKts * 60) : 90;
       const totalPax = Math.floor(Math.random() * 25 + 3);
       const pax1 = Math.floor(totalPax * 0.55);
@@ -1281,7 +1335,6 @@ export default function AcarsPage() {
         `FLIGHT ${cs}  ${dep}-${dst}`,
         `TOTAL CONNEX PAX  ${totalPax}`,
         '',
-        // Zubringerflüge landen kurz vor/nach deiner ETA am Zielflughafen
         `FROM ${airline}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin - 8)}   ${pax1} PAX`,
         `FROM ${airline}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin + 12)}  ${pax2} PAX`,
         '',
@@ -1302,7 +1355,6 @@ export default function AcarsPage() {
     }
 
     if (phase === 'approach') {
-      // Gate assignment on approach
       const gates = ['A', 'B', 'C', 'D', 'E'];
       const arrGate = `${gates[Math.floor(Math.random() * gates.length)]}${Math.floor(Math.random() * 40 + 1)}`;
       fire('gate_approach', [
@@ -1326,10 +1378,10 @@ export default function AcarsPage() {
     }
 
     if (phase === 'on_block' && distToDest < 15) {
-      const planRamp   = ofp.fuel.plan_ramp  ?? '—';
-      const planLand   = ofp.fuel.plan_land  ?? '—';
-      const enrtBurn   = ofp.fuel.enroute_burn ?? '—';
-      const taxiFuel   = ofp.fuel.taxi       ?? '—';
+      const planRamp = ofp.fuel.plan_ramp  ?? '—';
+      const planLand = ofp.fuel.plan_land  ?? '—';
+      const enrtBurn = ofp.fuel.enroute_burn ?? '—';
+      const taxiFuel = ofp.fuel.taxi       ?? '—';
       fire('on_block', [
         'BLOCK IN / FUEL UPLIFT REQUEST',
         `FLIGHT ${cs}  ${dep}-${dst}`,
@@ -1347,7 +1399,6 @@ export default function AcarsPage() {
         'CONFIRM ACTUAL FOB AND DEFECTS',
       ].join('\n'));
 
-      // Separate crew meals reminder at block-in
       const pax = ofp.weights.pax_count ?? '—';
       fire('meals_reminder', [
         'CATERING / CREW MEALS',
@@ -1370,37 +1421,28 @@ export default function AcarsPage() {
     const acr = ofp.aircraft.reg ?? acType;
     const etaMin = 90;
     const messages: string[] = [
-      // preflight
       ['PAX / LOAD BRIEF', `FLIGHT ${cs}  ${dep}-${dst}`, `AIRCRAFT ${acr}  ${acType}`,
         `PAX               ${ofp.weights.pax_count ?? '—'}`, `BAGS              ${ofp.weights.bag_count ?? '—'}`,
         `PAYLOAD           ${ofp.weights.payload ?? '—'} ${u}`, `EST ZFW           ${ofp.weights.est_zfw ?? '—'} ${u}`,
         `EST TOW           ${ofp.weights.est_tow ?? '—'} ${u}`, `RAMP FUEL         ${ofp.fuel.plan_ramp ?? '—'} ${u}`,
         'LOADSHEET SIGNED — READY FOR BOARDING'].join('\n'),
-      // taxi_out
       ['DEPARTURE INFORMATION', `FLIGHT ${cs}  ${dep}-${dst}`, `AIRCRAFT ${acr}  ${acType}`,
         'SLOT/CTOT AS FILED', 'PRE-DEPARTURE CLEARANCE AVAILABLE ON REQUEST', 'HAVE A SAFE DEPARTURE'].join('\n'),
-      // airborne
       ['AIRBORNE NOTIFICATION', `FLIGHT ${cs}  ${dep}-${dst}`,
         `AIRBORNE TIME  ${utcNow()}`, `ETA ${dst}  ${utcPlus(etaMin)}`, 'REPORT WHEN LEVEL'].join('\n'),
-      // cruise check
       ['CRUISE CHECK REQUEST', `FLIGHT ${cs}  ${dep}-${dst}`, 'PLEASE REPORT:',
         `  FOB (${u})`, '  CURRENT LEVEL', `  ETA ${dst}`, 'THANK YOU'].join('\n'),
-      // connex
       ['CONNEX SCHEDULE', `FLIGHT ${cs}  ${dep}-${dst}`, 'TOTAL CONNEX PAX  18', '',
         `FROM ${cs.replace(/\d.*$/, '')}456  ARR ${utcPlus(etaMin - 8)}   10 PAX`,
         `FROM ${cs.replace(/\d.*$/, '')}789  ARR ${utcPlus(etaMin + 12)}   8 PAX`, '',
         'MIN CONNECT TIME  45 MIN', 'NOTE PRIORITY OFFLOAD RECOMMENDED'].join('\n'),
-      // descent wx
       ['DESTINATION WEATHER ADVISORY', `FLIGHT ${cs}  APPROACHING ${dst}`,
         'CURRENT CONDITIONS ON REQUEST', 'RECOMMEND REQUEST D-ATIS VIA ACARS',
         'EXPECT ILS APPROACH', 'HAVE A SAFE DESCENT'].join('\n'),
-      // gate assignment
       ['GATE ASSIGNMENT', `FLIGHT ${cs}  ${dep}-${dst}`,
         'ARR GATE/STAND  B14', `ETA             ${utcPlus(20)}`, 'HANDLING TEAM NOTIFIED', `WELCOME TO ${dst}`].join('\n'),
-      // landed
       ['LANDING ACKNOWLEDGEMENT', `FLIGHT ${cs}  LANDED ${dst}`,
         `LANDING TIME  ${utcNow()}`, 'PLEASE REPORT BLOCK IN TIME', 'GROUND HANDLING STANDING BY'].join('\n'),
-      // on_block
       ['BLOCK IN / FUEL UPLIFT REQUEST', `FLIGHT ${cs}  ${dep}-${dst}`,
         `BLOCK IN TIME      ${utcNow()}`, '',
         '── FUEL SUMMARY ──────────────────',
@@ -1411,7 +1453,6 @@ export default function AcarsPage() {
         '── UPLIFT REQUEST ────────────────',
         `TARGET RAMP FUEL   ${ofp.fuel.plan_ramp ?? '—'} ${u}`,
         'PLEASE ARRANGE FUEL UPLIFT', 'CONFIRM ACTUAL FOB AND DEFECTS'].join('\n'),
-      // meals reminder
       ['CATERING / CREW MEALS', `FLIGHT ${cs}  ${dep}-${dst}`,
         `TOTAL PAX    ${ofp.weights.pax_count ?? '—'}`,
         'PLEASE CONFIRM CATERING UPLIFT', 'ADVISE ANY SPECIAL MEAL CHANGES'].join('\n'),
@@ -1419,11 +1460,22 @@ export default function AcarsPage() {
     messages.forEach((pkt, i) => setTimeout(() => injectOps(pkt), i * 400));
   }
 
+  // Filter messages by search
+  const filteredMessages = searchQuery.trim()
+    ? acarsMessages
+        .map((m, i) => ({ m, i }))
+        .filter(({ m }) =>
+          m.packet.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (m.from ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (m.to ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+        )
+    : acarsMessages.map((m, i) => ({ m, i }));
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-5 py-2.5 border-b border-[var(--c-border)] shrink-0 flex items-center gap-3">
-        <MessageSquare size={14} className="text-gray-500" />
+      <div className="px-4 py-2 border-b border-[var(--c-border)] shrink-0 flex items-center gap-2">
+        <MessageSquare size={14} className="text-gray-500 shrink-0" />
         <span className="text-xs font-mono text-white">{callsign}</span>
         <span className="text-[10px] text-gray-600 font-mono">{depIcao}→{destIcao}</span>
         <div className="flex items-center gap-1.5 text-xs">
@@ -1433,7 +1485,33 @@ export default function AcarsPage() {
           {hoppiePolling && <Loader2 size={11} className="animate-spin text-gray-500 ml-1" />}
         </div>
         {hoppieError && <span className="text-xs text-red-400">{hoppieError}</span>}
-        <div className="ml-auto flex gap-2">
+
+        {/* Search */}
+        <div className="ml-auto flex items-center gap-1 bg-[var(--c-depth)] border border-[var(--c-border)] rounded-lg px-2 py-1">
+          <Search size={10} className="text-gray-600 shrink-0" />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search…"
+            className="bg-transparent text-[10px] font-mono text-gray-300 placeholder-gray-600 outline-none w-24"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="text-gray-600 hover:text-gray-400">
+              <X size={9} />
+            </button>
+          )}
+        </div>
+
+        {/* Mute toggle */}
+        <button
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          title={soundEnabled ? 'Mute sounds' : 'Unmute sounds'}
+          className="p-1.5 text-gray-500 hover:text-gray-300 border border-[var(--c-border)] hover:border-[var(--c-border2)] rounded-lg transition-colors"
+        >
+          {soundEnabled ? <Volume2 size={11} /> : <VolumeX size={11} />}
+        </button>
+
+        <div className="flex gap-1.5">
           <button onClick={testAllPhaseMessages}
             className="text-[10px] text-amber-500 hover:text-amber-300 border border-amber-500/30 hover:border-amber-400/50 px-2 py-0.5 rounded transition-colors"
             title="Trigger all auto-messages for testing">
@@ -1446,25 +1524,40 @@ export default function AcarsPage() {
         </div>
       </div>
 
-      {/* Message log */}
+      {/* Search result count */}
+      {searchQuery && (
+        <div className="px-4 py-1 text-[10px] text-gray-500 border-b border-[var(--c-border)] shrink-0">
+          {filteredMessages.length} of {acarsMessages.length} messages
+        </div>
+      )}
+
+      {/* Message thread */}
       <div className="flex-1 overflow-auto p-4 space-y-2 min-h-0">
         {acarsMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-600 text-xs">
             No messages yet — polling every 30s
           </div>
-        ) : acarsMessages.map((msg, i) => {
+        ) : filteredMessages.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-gray-600 text-xs">
+            No messages match "{searchQuery}"
+          </div>
+        ) : filteredMessages.map(({ m: msg, i }) => {
           const cpdlc = msg.cpdlc ?? (msg.type === 'cpdlc' ? parseCpdlc(msg.packet) ?? undefined : undefined);
           const displayText = (msg.type === 'cpdlc' && cpdlc) ? cpdlc.content : msg.packet;
           const accent = msg.isSent ? 'none' : msgAccent(displayText);
           const receivedAt = new Date(msg.receivedAt);
+          const pdcParsed = !msg.isSent ? parsePDCMessage(msg.packet) : null;
           return (
-            <div key={i} className={clsx(
-              'rounded-lg p-3 text-xs font-mono border',
-              msg.isSent ? 'bg-blue-600/10 border-blue-500/20 ml-8' : `${ACCENT[accent]} mr-8`
+            <div key={i} className={clsx('flex', msg.isSent ? 'justify-end' : 'justify-start')}>
+            <div className={clsx(
+              'max-w-[92%] rounded-xl p-2.5 text-xs font-mono border',
+              msg.isSent
+                ? 'bg-blue-600/10 border-blue-500/20 rounded-br-sm'
+                : `${ACCENT[accent]} rounded-bl-sm`
             )}>
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between gap-3 mb-1">
                 <span className={clsx('font-semibold text-[10px] uppercase', msg.isSent ? 'text-blue-400' : 'text-green-400')}>
-                  {msg.isSent ? `▲ TO ${msg.to}` : `▼ ${msg.from}`}
+                  {msg.isSent ? `▲ ${msg.to}` : `▼ ${msg.from}`}
                   <span className="text-gray-600"> · {msg.type.toUpperCase()}</span>
                   {!msg.isSent && (
                     <button onClick={() => { setReplyTo(msg.from ?? null); setMode('telex'); }}
@@ -1473,9 +1566,22 @@ export default function AcarsPage() {
                     </button>
                   )}
                 </span>
-                <span className="text-gray-600 text-[10px]">{receivedAt.toUTCString().slice(17, 22)}Z</span>
+                <span className="text-gray-600 text-[10px] shrink-0">{receivedAt.toUTCString().slice(17, 22)}Z</span>
               </div>
               <div className="text-gray-300 leading-relaxed whitespace-pre-wrap break-words">{displayText}</div>
+
+              {/* PDC parsed card */}
+              {pdcParsed && (pdcParsed.squawk || pdcParsed.sid || pdcParsed.initialClimb) && (
+                <div className="mt-2 border border-blue-500/30 bg-blue-500/5 rounded p-2">
+                  <div className="text-[9px] text-blue-400 uppercase tracking-wider mb-1">PDC Parsed</div>
+                  <div className="flex gap-4 font-mono text-[10px]">
+                    {pdcParsed.squawk    && <span><span className="text-gray-500">SQK </span><span className="text-white">{pdcParsed.squawk}</span></span>}
+                    {pdcParsed.sid       && <span><span className="text-gray-500">SID </span><span className="text-white">{pdcParsed.sid}</span></span>}
+                    {pdcParsed.initialClimb && <span><span className="text-gray-500">CLB </span><span className="text-white">{pdcParsed.initialClimb}</span></span>}
+                  </div>
+                </div>
+              )}
+
               {!msg.isSent && accent !== 'none' && (
                 <div className={clsx('mt-1.5 text-[10px] font-medium uppercase', {
                   'text-green-400': accent === 'clearance',
@@ -1485,7 +1591,7 @@ export default function AcarsPage() {
                   {accent === 'clearance' ? '✓ Clearance received' : accent === 'unable' ? '✗ Unable' : '✓ Acknowledged'}
                 </div>
               )}
-              {/* Response buttons for ATC uplinks */}
+              {/* CPDLC response buttons */}
               {!msg.isSent && msg.type === 'cpdlc' && cpdlc && cpdlcNeedsResponse(cpdlc) && (
                 <div className="flex gap-1.5 mt-2 flex-wrap">
                   {['WILCO', 'UNABLE', 'ROGER', 'STANDBY'].map(resp => (
@@ -1503,34 +1609,30 @@ export default function AcarsPage() {
               {/* Loadsheet ACPT/REJECT */}
               {!msg.isSent && msg.packet.includes('REPLY ACPT') && !respondedIdx.has(i) && (
                 <div className="flex gap-1.5 mt-2">
-                  <button
-                    onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS', `ACPT\nFLIGHT ${callsign}\nLOADSHEET ACKNOWLEDGED ${utcNow()}`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `ACPT\nFLIGHT ${callsign}\nLOADSHEET ACKNOWLEDGED ${utcNow()}`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
                     ✓ ACPT
                   </button>
-                  <button
-                    onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS', `REJECT\nFLIGHT ${callsign}\nLOADSHEET REJECTED — PLEASE REVISE`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `REJECT\nFLIGHT ${callsign}\nLOADSHEET REJECTED — PLEASE REVISE`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors">
                     ✗ REJECT
                   </button>
                 </div>
               )}
-              {/* REPORT WHEN LEVEL — airborne */}
+              {/* REPORT WHEN LEVEL */}
               {!msg.isSent && msg.packet.includes('REPORT WHEN LEVEL') && !respondedIdx.has(i) && (
                 <div className="flex gap-1.5 mt-2">
-                  <button
-                    onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS', `WILCO\nFLIGHT ${callsign}\nWILL REPORT WHEN LEVEL`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `WILCO\nFLIGHT ${callsign}\nWILL REPORT WHEN LEVEL`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
                     ✓ WILCO
                   </button>
-                  <button
-                    onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS', `UNABLE\nFLIGHT ${callsign}`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `UNABLE\nFLIGHT ${callsign}`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors">
                     ✗ UNABLE
                   </button>
                 </div>
               )}
-              {/* Cruise check — inline form */}
+              {/* Cruise check inline form */}
               {!msg.isSent && msg.packet.includes('PLEASE REPORT:') && msg.packet.includes('FOB') && !respondedIdx.has(i) && (
                 inlineReply?.idx === i ? (
                   <div className="mt-2 space-y-1.5">
@@ -1547,7 +1649,7 @@ export default function AcarsPage() {
                     </div>
                     <div className="flex gap-1.5">
                       <button
-                        onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS',
+                        onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
                           `CRUISE REPORT\nFLIGHT ${callsign}\nFOB         ${inlineReply.fob || '—'} ${fuelUnits}\nCURRENT FL  ${inlineReply.fl || '—'}\nETA         ${inlineReply.eta || '—'}`)}
                         className="px-3 py-1 rounded text-[10px] font-mono border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 transition-colors">
                         ▲ SEND REPORT
@@ -1559,7 +1661,7 @@ export default function AcarsPage() {
                     </div>
                   </div>
                 ) : (
-                  <button onClick={() => setInlineReply({ idx: i, fob: '', fl: '', eta: '' })}
+                  <button onClick={() => setInlineReply({ idx: i, fob: '', fl: simPosition ? `${Math.round(simPosition.altFt / 100)}` : '', eta: '' })}
                     className="mt-2 px-3 py-1 rounded text-[10px] font-mono border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 transition-colors">
                     ↩ SEND CRUISE REPORT
                   </button>
@@ -1567,8 +1669,7 @@ export default function AcarsPage() {
               )}
               {/* BLOCK IN */}
               {!msg.isSent && msg.packet.includes('PLEASE REPORT BLOCK IN TIME') && !respondedIdx.has(i) && (
-                <button
-                  onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS', `BLOCK IN\nFLIGHT ${callsign}\nBLOCK IN TIME  ${utcNow()}`)}
+                <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `BLOCK IN\nFLIGHT ${callsign}\nBLOCK IN TIME  ${utcNow()}`)}
                   className="mt-2 px-3 py-1 rounded text-[10px] font-mono border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 transition-colors">
                   ⏱ BLOCK IN NOW
                 </button>
@@ -1576,13 +1677,11 @@ export default function AcarsPage() {
               {/* Fuel uplift confirm */}
               {!msg.isSent && msg.packet.includes('CONFIRM ACTUAL FOB AND DEFECTS') && !respondedIdx.has(i) && (
                 <div className="flex gap-1.5 mt-2">
-                  <button
-                    onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS', `CONFIRMED\nFLIGHT ${callsign}\nFOB AS PLANNED — NO DEFECTS`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `CONFIRMED\nFLIGHT ${callsign}\nFOB AS PLANNED — NO DEFECTS`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
                     ✓ CONFIRM
                   </button>
-                  <button
-                    onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS', `DEFECTS NOTED\nFLIGHT ${callsign}\nDEFECTS TO FOLLOW — STAND BY`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `DEFECTS NOTED\nFLIGHT ${callsign}\nDEFECTS TO FOLLOW — STAND BY`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 transition-colors">
                     ⚠ ADVISE DEFECTS
                   </button>
@@ -1591,26 +1690,24 @@ export default function AcarsPage() {
               {/* Catering confirm */}
               {!msg.isSent && msg.packet.includes('PLEASE CONFIRM CATERING UPLIFT') && !respondedIdx.has(i) && (
                 <div className="flex gap-1.5 mt-2">
-                  <button
-                    onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS', `CONFIRMED\nFLIGHT ${callsign}\nCATERING UPLIFT CONFIRMED`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `CONFIRMED\nFLIGHT ${callsign}\nCATERING UPLIFT CONFIRMED`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
                     ✓ CONFIRMED
                   </button>
-                  <button
-                    onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS', `UNABLE\nFLIGHT ${callsign}\nCATERING ISSUE — PLEASE ADVISE`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `UNABLE\nFLIGHT ${callsign}\nCATERING ISSUE — PLEASE ADVISE`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors">
                     ✗ UNABLE
                   </button>
                 </div>
               )}
-              {/* Gate assignment acknowledge */}
+              {/* Gate/slot acknowledge */}
               {!msg.isSent && msg.packet.includes('ACKNOWLEDGE WHEN READY') && !respondedIdx.has(i) && (
-                <button
-                  onClick={() => replyToMsg(i, msg.from ?? 'OPENEFBOPS', `ACKNOWLEDGED\nFLIGHT ${callsign}\nGATE INFO RECEIVED ${utcNow()}`)}
+                <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `ACKNOWLEDGED\nFLIGHT ${callsign}\nGATE INFO RECEIVED ${utcNow()}`)}
                   className="mt-2 px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
                   ✓ ACKNOWLEDGED
                 </button>
               )}
+            </div>
             </div>
           );
         })}
@@ -1619,65 +1716,56 @@ export default function AcarsPage() {
 
       {/* Compose panel */}
       <div className="border-t border-[var(--c-border)] shrink-0">
-        {/* Mode selector */}
-        <div className="flex border-b border-[var(--c-border)]">
+        {/* Mode pills */}
+        <div className="flex gap-1 px-3 py-2 overflow-x-auto border-b border-[var(--c-border)] scrollbar-none">
           {COMPOSE_MODES.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setMode(id)}
               className={clsx(
-                'flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px',
-                mode === id ? 'text-white border-blue-500' : 'text-gray-500 border-transparent hover:text-gray-300'
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors shrink-0',
+                mode === id
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-500 hover:text-gray-200 bg-[var(--c-surface)] border border-[var(--c-border)] hover:border-[var(--c-border2)]'
               )}>
               <Icon size={11} />
               {label}
             </button>
           ))}
         </div>
-        {/* Active form */}
+        {/* Form area */}
         <div className="px-4 py-3">
           {mode === 'telex' && (
             <TelexForm defaultTo={replyTo ?? ''} onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); setReplyTo(null); }} />
           )}
           {mode === 'pdc' && (
-            <PDCForm
-              depIcao={depIcao} destIcao={destIcao} atcCallsign={atcCs}
+            <PDCForm depIcao={depIcao} destIcao={destIcao} atcCallsign={atcCs}
               acType={acType} route={route} hoppieLogon={hoppieLogon} callsign={callsign}
-              onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }}
-            />
+              onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }} />
           )}
           {mode === 'datis' && (
             <DAtisForm airports={airports} hoppieLogon={hoppieLogon} callsign={callsign} atisNetwork={atisNetwork}
               onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }}
               onInject={(msg) => {
                 addAcarsMessage(msg);
-                // Forward to Hoppie so Fenix/PMDG MCDU receives the ATIS
                 if (hoppieLogon && callsign && msg.from) {
                   hoppieSend(hoppieLogon, msg.from, callsign, msg.type, msg.packet).catch(() => {});
                 }
               }} />
           )}
           {mode === 'oceanic' && (
-            <OceanicForm
-              atcCallsign={atcCs} acType={acType} destIcao={destIcao}
+            <OceanicForm atcCallsign={atcCs} acType={acType} destIcao={destIcao}
               cruiseFl={cruiseFl} defaultMach={defMach}
               hoppieLogon={hoppieLogon} callsign={callsign}
-              onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }}
-            />
+              onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }} />
           )}
           {mode === 'cpdlc' && (
-            <CpdlcForm
-              callsign={callsign}
-              onSend={async (to, type, pkt) => { await sendMsg(to, type, pkt); }}
-            />
+            <CpdlcForm callsign={callsign} onSend={async (to, type, pkt) => { await sendMsg(to, type, pkt); }} />
           )}
           {mode === 'position' && (
-            <PositionForm
-              callsign={callsign} destIcao={destIcao} cruiseFl={cruiseFl}
-              onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }}
-            />
+            <PositionForm callsign={callsign} destIcao={destIcao} cruiseFl={cruiseFl}
+              onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }} />
           )}
           {mode === 'loadsheet' && (
-            <LoadsheetForm
-              callsign={callsign} depIcao={depIcao} destIcao={destIcao}
+            <LoadsheetForm callsign={callsign} depIcao={depIcao} destIcao={destIcao}
               acReg={ofp.aircraft.reg ?? ''} acType={acType} units={fuelUnits}
               estZfw={ofp.weights.est_zfw ?? ''} maxZfw={ofp.weights.max_zfw ?? ''}
               estTow={ofp.weights.est_tow ?? ''} maxTow={ofp.weights.max_tow ?? ''}
@@ -1690,24 +1778,19 @@ export default function AcarsPage() {
                 if (hoppieLogon && callsign) {
                   hoppieSend(hoppieLogon, msg.from, callsign, msg.type, msg.packet).catch(() => {});
                 }
-              }}
-            />
+              }} />
           )}
-
           {mode === 'ops' && (
-            <OpsForm
-              callsign={callsign} depIcao={depIcao} destIcao={destIcao}
+            <OpsForm callsign={callsign} depIcao={depIcao} destIcao={destIcao}
               acReg={ofp.aircraft.reg ?? ''} acType={acType}
-              units={fuelUnits}
-              fuelOnboard={ofp.fuel.plan_ramp ?? ''}
+              units={fuelUnits} fuelOnboard={ofp.fuel.plan_ramp ?? ''}
               onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }}
               onInject={(msg) => {
                 addAcarsMessage(msg);
                 if (hoppieLogon && callsign) {
                   hoppieSend(hoppieLogon, msg.from, callsign, msg.type, msg.packet).catch(() => {});
                 }
-              }}
-            />
+              }} />
           )}
         </div>
       </div>

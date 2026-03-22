@@ -1,9 +1,9 @@
 {
-  "name": "openefb",
+  "name": "opslink",
   "private": true,
   "version": "0.1.0",
-  "description": "Open-source Electronic Flight Bag for flight simulators",
-  "author": "Moritz Soehl",
+  "description": "ACARS datalink & flight operations tool for flight simulators",
+  "author": "Moritz Söhl",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -17,8 +17,8 @@
     "preview": "vite preview"
   },
   "build": {
-    "appId": "com.openefb.app",
-    "productName": "OpenEFB",
+    "appId": "com.opslink.app",
+    "productName": "OpsLink",
     "directories": {
       "output": "release"
     },
@@ -34,20 +34,20 @@
       "category": "public.app-category.utilities"
     },
     "dmg": {
-      "artifactName": "OpenEFB.dmg"
+      "artifactName": "OpsLink.dmg"
     },
     "win": {
       "target": "nsis",
-      "artifactName": "OpenEFB-Setup.exe"
+      "artifactName": "OpsLink-Setup.exe"
     },
     "linux": {
       "target": "AppImage",
-      "artifactName": "OpenEFB.AppImage"
+      "artifactName": "OpsLink.AppImage"
     },
     "publish": {
       "provider": "github",
       "owner": "msoehl",
-      "repo": "openefb"
+      "repo": "OpsLink"
     }
   },
   "dependencies": {

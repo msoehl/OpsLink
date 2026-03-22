@@ -67,9 +67,7 @@ export async function hoppiePing(logon: string, callsign: string): Promise<boole
   return text.startsWith('ok');
 }
 
-/** Returns true if the given station callsign is currently online on Hoppie.
- *  Hoppie echoes the station name in the response body when it is active:
- *  "ok {EDDF_DEL:ping:}" → online,  "ok" (empty body) → offline. */
+/** Returns true if the given station callsign is currently online on Hoppie. */
 export async function hoppieStationOnline(logon: string, from: string, station: string): Promise<boolean> {
   try {
     const url = buildUrl({ logon, from, to: station, type: 'ping', packet: '' });
@@ -78,6 +76,42 @@ export async function hoppieStationOnline(logon: string, from: string, station: 
     return text.startsWith('ok') && text.toUpperCase().includes(station.toUpperCase());
   } catch {
     return false;
+  }
+}
+
+/** Scrapes the public Hoppie online-stations page and returns callsigns matching the given prefix. */
+export async function hoppieOnlineStations(prefix: string): Promise<string[]> {
+  try {
+    const res = await fetch('https://www.hoppie.nl/acars/system/online.html');
+    const html = await res.text();
+    const re = /callsign=([A-Z0-9_]+)/g;
+    const found = new Set<string>();
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      if (m[1].toUpperCase().startsWith(prefix.toUpperCase())) found.add(m[1]);
+    }
+    return [...found];
+  } catch {
+    return [];
+  }
+}
+
+/** Returns all online station names that start with the given prefix. */
+export async function hoppieQueryStations(logon: string, from: string, prefix: string): Promise<string[]> {
+  try {
+    const url = buildUrl({ logon, from, to: 'SERVER', type: 'stations', packet: prefix });
+    const res = await fetch(url);
+    const text = await res.text();
+    if (!text.startsWith('ok')) return [];
+    const stations: string[] = [];
+    const re = /\{([^:}]+):/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      stations.push(m[1]);
+    }
+    return stations.filter(s => s.toUpperCase().startsWith(prefix.toUpperCase()));
+  } catch {
+    return [];
   }
 }
 
