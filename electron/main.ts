@@ -50,7 +50,7 @@ function createWindow(): BrowserWindow {
           "script-src 'self' 'unsafe-inline'; " +
           "style-src 'self' 'unsafe-inline'; " +
           "img-src 'self' data: blob: https://*.cartocdn.com https://*.tile.openstreetmap.org https://*.amazonaws.com; " +
-          "connect-src 'self' https://data.vatsim.net https://api.ivao.aero https://www.hoppie.nl https://aviationweather.gov https://www.simbrief.com https://*.cartocdn.com https://charts.api.navigraph.com https://identity.api.navigraph.com https://api.vatsim.net https://atc.vatsim.net https://data.ivao.aero"
+          "connect-src 'self' https://data.vatsim.net https://api.ivao.aero https://www.hoppie.nl https://aviationweather.gov https://www.simbrief.com https://*.cartocdn.com https://charts.api.navigraph.com https://identity.api.navigraph.com https://api.vatsim.net https://atc.vatsim.net https://data.ivao.aero https://raw.githubusercontent.com"
         ],
       },
     });
