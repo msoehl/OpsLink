@@ -92,6 +92,10 @@ interface EFBStore {
   pendingCpdlcLogon: string | null;
   setPendingCpdlcLogon: (callsign: string | null) => void;
 
+  // Update channel (persisted)
+  updateChannel: 'stable' | 'dev';
+  setUpdateChannel: (ch: 'stable' | 'dev') => void;
+
   // Map layer toggles (persisted)
   mapTrafficEnabled: boolean;
   mapAtcEnabled: boolean;
@@ -204,6 +208,9 @@ export const useEFBStore = create<EFBStore>()(
       pendingCpdlcLogon: null,
       setPendingCpdlcLogon: (callsign) => set({ pendingCpdlcLogon: callsign }),
 
+      updateChannel: 'stable',
+      setUpdateChannel: (ch) => set({ updateChannel: ch }),
+
       mapTrafficEnabled: false,
       mapAtcEnabled: false,
       mapTrailEnabled: false,
@@ -244,6 +251,7 @@ export const useEFBStore = create<EFBStore>()(
         soundEnabled: state.soundEnabled,
         acarsTemplates: state.acarsTemplates,
         acarsMessages: state.acarsMessages,
+        updateChannel: state.updateChannel,
         mapTrafficEnabled: state.mapTrafficEnabled,
         mapAtcEnabled: state.mapAtcEnabled,
         mapTrailEnabled: state.mapTrailEnabled,

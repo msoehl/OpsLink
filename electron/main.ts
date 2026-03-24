@@ -70,6 +70,7 @@ ipcMain.handle('win:maximize',    (_e, _a, win = BrowserWindow.getFocusedWindow(
 ipcMain.handle('win:close',       (_e, _a, win = BrowserWindow.getFocusedWindow()) => win?.close());
 ipcMain.handle('win:is-maximized',(_e, _a, win = BrowserWindow.getFocusedWindow()) => win?.isMaximized() ?? false);
 ipcMain.handle('win:platform',    () => process.platform);
+ipcMain.handle('app:version',     () => app.getVersion());
 
 ipcMain.handle('open-external', (_event, url: string) => {
   // Only allow https:// URLs
@@ -92,19 +93,33 @@ function setupUpdater(win: BrowserWindow) {
   autoUpdater.on('checking-for-update',  ()     => send('checking'));
   autoUpdater.on('update-available',     (info) => send('available', info));
   autoUpdater.on('update-not-available', (info) => send('not-available', info));
-  autoUpdater.on('error',                (err)  => send('error', err.message));
+  autoUpdater.on('error', (err) => {
+    const msg = err.message ?? '';
+    if (msg.includes('Unable to find latest release') || msg.includes('No published versions'))
+      send('error', 'No release found for this channel.');
+    else if (msg.includes('net::') || msg.includes('ENOTFOUND') || msg.includes('ECONNREFUSED'))
+      send('error', 'Network error — check your connection.');
+    else
+      send('error', 'Update check failed.');
+  });
   autoUpdater.on('download-progress',    (p)    => send('progress', Math.round(p.percent)));
   autoUpdater.on('update-downloaded',    (info) => send('downloaded', info));
 
-  // Check on startup, then every 4 hours
+  // Delay startup check by 5s so renderer can sync channel preference first
   if (!isDev) {
-    autoUpdater.checkForUpdates();
+    setTimeout(() => autoUpdater.checkForUpdates(), 5000);
     setInterval(() => autoUpdater.checkForUpdates(), 4 * 60 * 60 * 1000);
   }
 
   ipcMain.handle('check-for-updates', () => {
     if (isDev) { send('not-available'); return; }
     autoUpdater.checkForUpdates();
+  });
+
+  ipcMain.handle('set-update-channel', (_e, channel: string) => {
+    autoUpdater.allowDowngrade  = channel === 'dev';
+    autoUpdater.allowPrerelease = channel === 'dev';
+    autoUpdater.channel         = 'latest'; // always use latest-mac.yml / latest.yml
   });
 
   ipcMain.handle('install-update', () => autoUpdater.quitAndInstall());

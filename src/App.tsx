@@ -27,7 +27,7 @@ function PageContent() {
 }
 
 export default function App() {
-  const { theme } = useEFBStore();
+  const { theme, updateChannel } = useEFBStore();
   const [offline, setOffline] = useState(!navigator.onLine);
 
   useAcarsPolling();
@@ -37,6 +37,20 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  // Derive update channel from app version on first launch, then sync to main process
+  const { setUpdateChannel } = useEFBStore();
+  useEffect(() => {
+    window.electronAPI?.appVersion?.().then(v => {
+      const isDev = v?.includes('-dev') || v?.includes('-alpha') || v?.includes('-beta');
+      const derived = isDev ? 'dev' : 'stable';
+      setUpdateChannel(derived);
+      window.electronAPI?.setUpdateChannel?.(derived);
+    }).catch(() => {
+      window.electronAPI?.setUpdateChannel?.(updateChannel);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const on  = () => setOffline(false);

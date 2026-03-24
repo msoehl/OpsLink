@@ -6,6 +6,7 @@ import { Loader2, CheckCircle, AlertCircle, Settings, RefreshCw, Zap } from 'luc
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'error' | 'progress' | 'downloaded';
 
 function UpdateSection() {
+  const { updateChannel, setUpdateChannel } = useEFBStore();
   const [status, setStatus]       = useState<UpdateStatus>('idle');
   const [info, setInfo]           = useState<string>('');
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
@@ -32,7 +33,25 @@ function UpdateSection() {
   return (
     <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
       <h3 className="text-sm font-semibold text-white mb-1">Updates</h3>
-      <p className="text-xs text-gray-500 mb-4">Check for new versions of OpsLink.</p>
+      <p className="text-xs text-gray-500 mb-3">Check for new versions of OpsLink.</p>
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-xs text-gray-400 w-28 shrink-0">Update Channel</span>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setUpdateChannel('dev')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              updateChannel === 'dev'
+                ? 'bg-amber-600 text-white'
+                : 'bg-[var(--c-depth)] border border-[var(--c-border)] text-gray-400 hover:border-[var(--c-border2)]'
+            }`}>
+            Dev (Pre-release)
+          </button>
+          <button disabled title="No stable release available yet"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--c-depth)] border border-[var(--c-border)] text-gray-600 cursor-not-allowed">
+            Stable (soon)
+          </button>
+        </div>
+      </div>
       <div className="flex items-center gap-3 flex-wrap">
         {status !== 'downloaded' ? (
           <button
@@ -89,6 +108,8 @@ export default function SettingsPage() {
   const [simbriefInput, setSimbriefInput] = useState(simbriefUsername);
   const [simbriefSaved, setSimbriefSaved] = useState(false);
   const [hoppieInput, setHoppieInput] = useState(hoppieLogon);
+  const [appVersion, setAppVersion] = useState('');
+  useEffect(() => { window.electronAPI?.appVersion?.().then(v => setAppVersion(v)).catch(() => {}); }, []);
   const [hoppieSaved, setHoppieSaved] = useState(false);
 
   async function handleSimbriefSave() {
@@ -214,7 +235,7 @@ export default function SettingsPage() {
             A free, open-source ACARS datalink & flight operations tool for flight simulator enthusiasts.
             Integrates SimBrief, Hoppie ACARS, CPDLC, and live VATSIM/IVAO data.
           </p>
-          <div className="mt-3 text-xs text-gray-600">Version 0.1.0 · For simulator use only</div>
+          <div className="mt-3 text-xs text-gray-600">{appVersion ? `Version ${appVersion}` : 'OpsLink'} · For simulator use only</div>
           <div className="mt-4 pt-4 border-t border-[var(--c-border)] flex items-center gap-3">
             <button
               onClick={() => window.electronAPI?.openExternal('https://buymeacoffee.com/YOUR_USERNAME')}
