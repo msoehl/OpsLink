@@ -95,15 +95,16 @@ jobs:
           path: artifacts
 
       - name: Delete old dev-latest release
-        run: gh release delete dev-latest --yes --cleanup-tag --repo msoehl/OpsLink || true
+        run: gh release delete dev-latest --yes --cleanup-tag --repo msoehl/OpsLink 2>&1 || echo "No existing release to delete"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to dev-latest pre-release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: dev-latest
-          name: "Dev Build (latest)"
+          name: "Dev Build ${{ github.run_number }}"
+          body: "Build #${{ github.run_number }} · ${{ github.sha }}"
           prerelease: true
           make_latest: false
           files: artifacts/**
