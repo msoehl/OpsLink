@@ -91,7 +91,7 @@ function setupUpdater(win: BrowserWindow) {
   const isPreRelease = /-(dev|alpha|beta)/.test(app.getVersion());
   autoUpdater.allowDowngrade  = isPreRelease;
   autoUpdater.allowPrerelease = isPreRelease;
-  autoUpdater.channel         = 'latest'; // always use latest-mac.yml / latest.yml
+  autoUpdater.channel         = isPreRelease ? 'dev' : 'latest';
 
   const send = (status: string, info?: unknown) =>
     win.webContents.send('update-status', { status, info });
@@ -126,7 +126,7 @@ function setupUpdater(win: BrowserWindow) {
     const preRelease = channel === 'dev';
     autoUpdater.allowDowngrade  = preRelease;
     autoUpdater.allowPrerelease = preRelease;
-    autoUpdater.channel         = 'latest';
+    autoUpdater.channel         = preRelease ? 'dev' : 'latest';
   });
 
   ipcMain.handle('install-update', () => autoUpdater.quitAndInstall());
