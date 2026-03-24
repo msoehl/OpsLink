@@ -15,7 +15,7 @@ export function startSimConnectConnector(
   async function tryConnect(protocol: Protocol, source: 'msfs' | 'p3d') {
     while (!stopped) {
       try {
-        const { handle } = await open('OpenEFB', protocol);
+        const { handle } = await open('OpsLink', protocol);
 
         handle.addToDataDefinition(DEF_ID, 'PLANE LATITUDE',              'degrees',         SimConnectDataType.FLOAT64);
         handle.addToDataDefinition(DEF_ID, 'PLANE LONGITUDE',             'degrees',         SimConnectDataType.FLOAT64);

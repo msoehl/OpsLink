@@ -240,7 +240,7 @@ export const useEFBStore = create<EFBStore>()(
       })),
     }),
     {
-      name: 'openefb-storage',
+      name: 'opslink-storage',
       partialize: (state) => ({
         activePage: state.activePage,
         simbriefUsername: state.simbriefUsername,
