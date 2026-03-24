@@ -38,6 +38,7 @@ jobs:
           name: dev-mac
           path: |
             release/*.dmg
+            release/*.zip
             release/*.yml
             release/*.blockmap
           retention-days: 1
