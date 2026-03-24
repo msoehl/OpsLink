@@ -87,6 +87,12 @@ ipcMain.handle('fetch-avwx-metar', async (_event, icao: string) => {
 function setupUpdater(win: BrowserWindow) {
   autoUpdater.autoDownload = true;
 
+  // Configure channel based on app version — must happen before first checkForUpdates()
+  const isDev = /-(dev|alpha|beta)/.test(app.getVersion());
+  autoUpdater.allowDowngrade  = isDev;
+  autoUpdater.allowPrerelease = isDev;
+  autoUpdater.channel         = 'latest'; // always use latest-mac.yml / latest.yml
+
   const send = (status: string, info?: unknown) =>
     win.webContents.send('update-status', { status, info });
 
