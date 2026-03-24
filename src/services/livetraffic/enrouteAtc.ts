@@ -73,7 +73,7 @@ export function filterEnrouteControllers(
     .filter(f => !isNaN(f.lat) && !isNaN(f.lon) && !(f.lat === 0 && f.lon === 0));
 
   // ── Airport sections ─────────────────────────────────────────────────────
-  const originCtrl   = airportControllers(controllers, originIcao,       'origin', false);
+  const originCtrl   = airportControllers(controllers, originIcao,       'origin');
   const destCtrl     = airportControllers(controllers, destIcao,         'destination');
   const alternateCtrl = alternateIcao
     ? airportControllers(controllers, alternateIcao, 'alternate')
@@ -83,7 +83,7 @@ export function filterEnrouteControllers(
     ...originCtrl, ...destCtrl, ...alternateCtrl,
   ].map(c => c.callsign));
 
-  // ── Enroute: CTR along route corridor only (APP shown only at airport sections) ──
+  // ── Enroute: CTR only along route corridor (APP only at airport sections) ──
   const enrouteCandidates = controllers.filter(c =>
     c.facility === 6 &&
     validCoords(c) &&

@@ -180,9 +180,8 @@ function TelexForm({ onSend, defaultTo = '' }: {
   );
 }
 
-function PDCForm({ depIcao, destIcao, atcCallsign, acType, route, hoppieLogon, callsign, onSend }: {
+function PDCForm({ depIcao, destIcao, atcCallsign, acType, route, onSend }: {
   depIcao: string; destIcao: string; atcCallsign: string; acType: string; route: string;
-  hoppieLogon: string; callsign: string;
   onSend: (to: string, pkt: string) => Promise<void>;
 }) {
   const [atis, setAtis] = useState('');
@@ -1738,7 +1737,7 @@ export default function AcarsPage() {
           )}
           {mode === 'pdc' && (
             <PDCForm depIcao={depIcao} destIcao={destIcao} atcCallsign={atcCs}
-              acType={acType} route={route} hoppieLogon={hoppieLogon} callsign={callsign}
+              acType={acType} route={route}
               onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }} />
           )}
           {mode === 'datis' && (
