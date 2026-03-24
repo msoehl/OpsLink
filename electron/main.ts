@@ -88,9 +88,9 @@ function setupUpdater(win: BrowserWindow) {
   autoUpdater.autoDownload = true;
 
   // Configure channel based on app version — must happen before first checkForUpdates()
-  const isDev = /-(dev|alpha|beta)/.test(app.getVersion());
-  autoUpdater.allowDowngrade  = isDev;
-  autoUpdater.allowPrerelease = isDev;
+  const isPreRelease = /-(dev|alpha|beta)/.test(app.getVersion());
+  autoUpdater.allowDowngrade  = isPreRelease;
+  autoUpdater.allowPrerelease = isPreRelease;
   autoUpdater.channel         = 'latest'; // always use latest-mac.yml / latest.yml
 
   const send = (status: string, info?: unknown) =>
@@ -111,7 +111,7 @@ function setupUpdater(win: BrowserWindow) {
   autoUpdater.on('download-progress',    (p)    => send('progress', Math.round(p.percent)));
   autoUpdater.on('update-downloaded',    (info) => send('downloaded', info));
 
-  // Delay startup check by 5s so renderer can sync channel preference first
+  // isDev = running unpackaged (Vite dev server) — skip auto-updater entirely
   if (!isDev) {
     setTimeout(() => autoUpdater.checkForUpdates(), 5000);
     setInterval(() => autoUpdater.checkForUpdates(), 4 * 60 * 60 * 1000);
@@ -123,9 +123,10 @@ function setupUpdater(win: BrowserWindow) {
   });
 
   ipcMain.handle('set-update-channel', (_e, channel: string) => {
-    autoUpdater.allowDowngrade  = channel === 'dev';
-    autoUpdater.allowPrerelease = channel === 'dev';
-    autoUpdater.channel         = 'latest'; // always use latest-mac.yml / latest.yml
+    const preRelease = channel === 'dev';
+    autoUpdater.allowDowngrade  = preRelease;
+    autoUpdater.allowPrerelease = preRelease;
+    autoUpdater.channel         = 'latest';
   });
 
   ipcMain.handle('install-update', () => autoUpdater.quitAndInstall());
