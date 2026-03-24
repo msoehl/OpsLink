@@ -35,5 +35,8 @@ Thumbs.db
 .claude/
 CLAUDE.md
 
+# Vite cache
+.vite/
+
 # Generated icon intermediates
 build/icons/

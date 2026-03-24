@@ -11,7 +11,8 @@
     "dev:electron": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "tsc -b && vite build",
     "build:electron": "npm run build && tsc -p electron/tsconfig.json",
-    "electron:pack": "npm run build:electron && electron-builder",
+    "electron:pack": "npm run build:electron && electron-builder --publish never",
+    "electron:pack-dev": "npm run build:electron && electron-builder --publish never",
     "electron:release": "npm run build:electron && electron-builder --publish always",
     "lint": "eslint .",
     "preview": "vite preview"

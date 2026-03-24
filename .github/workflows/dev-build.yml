@@ -1,0 +1,104 @@
+name: Dev Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set dev version
+        run: node -e "const fs=require('fs'),p=JSON.parse(fs.readFileSync('package.json')); const [maj,min]=p.version.split('.'); p.version=maj+'.'+(+min+1)+'.0-dev.'+process.env.BUILD; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+        env:
+          BUILD: ${{ github.run_number }}
+
+      - name: Build (macOS)
+        run: npm run electron:pack-dev
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-mac
+          path: |
+            release/*.dmg
+            release/*.yml
+            release/*.blockmap
+          retention-days: 1
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set dev version
+        run: node -e "const fs=require('fs'),p=JSON.parse(fs.readFileSync('package.json')); const [maj,min]=p.version.split('.'); p.version=maj+'.'+(+min+1)+'.0-dev.'+process.env.BUILD; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+        env:
+          BUILD: ${{ github.run_number }}
+
+      - name: Build (Windows)
+        run: npm run electron:pack-dev
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-win
+          path: |
+            release/*.exe
+            release/*.yml
+            release/*.blockmap
+          retention-days: 1
+
+  publish:
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-mac
+          path: artifacts
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-win
+          path: artifacts
+
+      - name: Delete old dev-latest release
+        run: gh release delete dev-latest --yes --cleanup-tag || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to dev-latest pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev-latest
+          name: "Dev Build (latest)"
+          prerelease: true
+          make_latest: false
+          files: artifacts/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
