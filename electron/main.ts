@@ -109,12 +109,14 @@ function setupUpdater(win: BrowserWindow) {
       send('error', 'Update check failed.');
   });
   autoUpdater.on('download-progress',    (p)    => send('progress', Math.round(p.percent)));
-  autoUpdater.on('update-downloaded',    (info) => send('downloaded', info));
+
+  let updateReady = false;
+  autoUpdater.on('update-downloaded', (info) => { updateReady = true; send('downloaded', info); });
 
   // isDev = running unpackaged (Vite dev server) — skip auto-updater entirely
   if (!isDev) {
-    setTimeout(() => autoUpdater.checkForUpdates(), 5000);
-    setInterval(() => autoUpdater.checkForUpdates(), 4 * 60 * 60 * 1000);
+    setTimeout(() => { if (!updateReady) autoUpdater.checkForUpdates(); }, 5000);
+    setInterval(() => { if (!updateReady) autoUpdater.checkForUpdates(); }, 4 * 60 * 60 * 1000);
   }
 
   ipcMain.handle('check-for-updates', () => {

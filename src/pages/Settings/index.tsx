@@ -13,15 +13,16 @@ function UpdateSection() {
 
   useEffect(() => {
     const cleanup = window.electronAPI?.onUpdateStatus?.(({ status: s, info: i }) => {
-      setStatus(s as UpdateStatus);
-      if (s === 'available')       setInfo(`v${(i as { version: string })?.version ?? ''} verfügbar`);
-      else if (s === 'progress')   setInfo(`${i}%`);
-      else if (s === 'error')      setInfo(String(i));
-      else if (s === 'downloaded') setInfo('Bereit zur Installation');
-      else                         setInfo('');
-      if (s === 'not-available' || s === 'available' || s === 'error') {
-        setLastChecked(new Date());
-      }
+      setStatus(prev => {
+        if (prev === 'downloaded' && s !== 'downloaded') return prev;
+        if (s === 'available')       setInfo(`v${(i as { version: string })?.version ?? ''} verfügbar`);
+        else if (s === 'progress')   setInfo(`${i}%`);
+        else if (s === 'error')      setInfo(String(i));
+        else if (s === 'downloaded') setInfo('Bereit zur Installation');
+        else                         setInfo('');
+        if (s === 'not-available' || s === 'available' || s === 'error') setLastChecked(new Date());
+        return s as UpdateStatus;
+      });
     });
     return () => { cleanup?.(); };
   }, []);
