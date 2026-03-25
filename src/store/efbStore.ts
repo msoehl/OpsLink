@@ -242,7 +242,6 @@ export const useEFBStore = create<EFBStore>()(
     {
       name: 'opslink-storage',
       partialize: (state) => ({
-        activePage: state.activePage,
         simbriefUsername: state.simbriefUsername,
         ofp: state.ofp,
         atisNetwork: state.atisNetwork,
