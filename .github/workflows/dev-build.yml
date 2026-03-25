@@ -29,9 +29,6 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Rename yml to dev channel
-        run: mv release/latest-mac.yml release/latest-dev-mac.yml
-
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -62,10 +59,6 @@ jobs:
 
       - name: Build (Windows)
         run: npm run electron:pack-dev
-
-      - name: Rename yml to dev channel
-        run: Rename-Item -Path release\latest.yml -NewName latest-dev.yml
-        shell: pwsh
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4

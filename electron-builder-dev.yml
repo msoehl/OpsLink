@@ -1,0 +1,4 @@
+publish:
+  provider: generic
+  url: https://github.com/msoehl/OpsLink/releases/download/dev-latest
+  channel: dev
