@@ -19,8 +19,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Set dev version
-        run: node -e "const fs=require('fs'),p=JSON.parse(fs.readFileSync('package.json')); const [maj,min]=p.version.split('.'); p.version=maj+'.'+(+min+1)+'.0-dev.'+process.env.BUILD; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+      - name: Set dev version and publish config
+        run: node -e "const fs=require('fs'),p=JSON.parse(fs.readFileSync('package.json')); const [maj,min]=p.version.split('.'); p.version=maj+'.'+(+min+1)+'.0-dev.'+process.env.BUILD; p.build.publish={provider:'generic',url:'https://github.com/msoehl/OpsLink/releases/download/dev-latest',channel:'dev'}; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
         env:
           BUILD: ${{ github.run_number }}
 
@@ -52,8 +52,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Set dev version
-        run: node -e "const fs=require('fs'),p=JSON.parse(fs.readFileSync('package.json')); const [maj,min]=p.version.split('.'); p.version=maj+'.'+(+min+1)+'.0-dev.'+process.env.BUILD; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+      - name: Set dev version and publish config
+        run: node -e "const fs=require('fs'),p=JSON.parse(fs.readFileSync('package.json')); const [maj,min]=p.version.split('.'); p.version=maj+'.'+(+min+1)+'.0-dev.'+process.env.BUILD; p.build.publish={provider:'generic',url:'https://github.com/msoehl/OpsLink/releases/download/dev-latest',channel:'dev'}; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
         env:
           BUILD: ${{ github.run_number }}
 
