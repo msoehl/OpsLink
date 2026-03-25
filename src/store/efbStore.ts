@@ -116,7 +116,7 @@ interface EFBStore {
 export const useEFBStore = create<EFBStore>()(
   persist(
     (set, get) => ({
-      activePage: 'acars',
+      activePage: 'dashboard',
       setActivePage: (page) => set({ activePage: page }),
 
       simbriefUsername: '',
