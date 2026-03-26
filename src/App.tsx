@@ -31,10 +31,15 @@ export default function App() {
   const { theme, updateChannel } = useEFBStore();
   const [offline, setOffline] = useState(!navigator.onLine);
   const [updateReady, setUpdateReady] = useState(false);
+  const [forceModal, setForceModal] = useState(false);
 
   useEffect(() => {
+    const startTime = Date.now();
     const cleanup = window.electronAPI?.onUpdateStatus?.(({ status }) => {
-      if (status === 'downloaded') setUpdateReady(true);
+      if (status === 'downloaded') {
+        setUpdateReady(true);
+        setForceModal(Date.now() - startTime < 2 * 60 * 1000);
+      }
     });
     return () => { cleanup?.(); };
   }, []);
@@ -71,7 +76,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--c-base)]">
-      {updateReady && (
+      {updateReady && forceModal && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
           <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-xl p-8 max-w-sm w-full mx-4 text-center space-y-4">
             <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center mx-auto">
