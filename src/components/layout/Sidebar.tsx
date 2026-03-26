@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { type EFBPage, useEFBStore } from '../../store/efbStore';
 import {
   LayoutDashboard,
@@ -22,10 +22,18 @@ const navItems: { id: EFBPage; label: string; short: string; icon: React.Element
 
 export default function Sidebar() {
   const { activePage, setActivePage, ofp, acarsUnread, resetAcarsUnread } = useEFBStore();
+  const [updateReady, setUpdateReady] = useState(false);
 
   useEffect(() => {
     if (activePage === 'acars') resetAcarsUnread();
   }, [activePage, resetAcarsUnread]);
+
+  useEffect(() => {
+    const cleanup = window.electronAPI?.onUpdateStatus?.(({ status }) => {
+      if (status === 'downloaded') setUpdateReady(true);
+    });
+    return () => { cleanup?.(); };
+  }, []);
 
   return (
     <aside className="w-16 bg-[var(--c-depth)] border-r border-[var(--c-border)] flex flex-col items-center py-3 gap-1 shrink-0">
@@ -56,6 +64,9 @@ export default function Sidebar() {
             <Icon size={20} />
             {id === 'acars' && acarsUnread > 0 && (
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+            )}
+            {id === 'settings' && updateReady && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full" />
             )}
           </div>
           <span className="text-[9px] leading-none font-medium">{short}</span>
