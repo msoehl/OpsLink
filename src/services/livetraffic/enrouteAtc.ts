@@ -83,9 +83,9 @@ export function filterEnrouteControllers(
     ...originCtrl, ...destCtrl, ...alternateCtrl,
   ].map(c => c.callsign));
 
-  // ── Enroute: CTR only along route corridor (APP only at airport sections) ──
+  // ── Enroute: CTR (6) + FSS/Oceanic (7) along route corridor (APP only at airport sections) ──
   const enrouteCandidates = controllers.filter(c =>
-    (c.facility === 6 || c.facility === 7) && // CTR + FSS (oceanic)
+    (c.facility === 6 || c.facility === 7) &&
     validCoords(c) &&
     !airportCallsigns.has(c.callsign) &&
     !airportIcaos.has(c.icao?.toUpperCase() ?? ''),
