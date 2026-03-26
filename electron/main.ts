@@ -111,7 +111,12 @@ function setupUpdater(win: BrowserWindow) {
   autoUpdater.on('download-progress',    (p)    => send('progress', Math.round(p.percent)));
 
   let updateReady = false;
-  autoUpdater.on('update-downloaded', (info) => { updateReady = true; send('downloaded', info); });
+  let downloadedFile = '';
+  autoUpdater.on('update-downloaded', (info) => {
+    updateReady = true;
+    downloadedFile = info.downloadedFile ?? '';
+    send('downloaded', info);
+  });
 
   // isDev = running unpackaged (Vite dev server) — skip auto-updater entirely
   if (!isDev) {
@@ -133,8 +138,9 @@ function setupUpdater(win: BrowserWindow) {
   ipcMain.handle('install-update', () => {
     try {
       autoUpdater.quitAndInstall(false, true);
-    } catch (err) {
-      send('error', 'Neustart fehlgeschlagen — bitte manuell neu starten.');
+    } catch {
+      if (downloadedFile) shell.showItemInFolder(downloadedFile);
+      else send('error', 'Neustart fehlgeschlagen — bitte manuell neu starten.');
     }
   });
 }
