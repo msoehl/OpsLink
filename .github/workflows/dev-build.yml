@@ -29,27 +29,6 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Patch update yml to use DMG
-        run: |
-          node -e "
-          const fs = require('fs'), crypto = require('crypto'), path = require('path');
-          const dir = 'release';
-          const files = fs.readdirSync(dir);
-          const dmg = files.find(f => f.endsWith('.dmg'));
-          if (!dmg) { console.log('No DMG found, skipping'); process.exit(0); }
-          const dmgPath = path.join(dir, dmg);
-          const sha512 = crypto.createHash('sha512').update(fs.readFileSync(dmgPath)).digest('base64');
-          const size = fs.statSync(dmgPath).size;
-          const version = JSON.parse(fs.readFileSync('package.json')).version;
-          const yml = 'version: ' + version + '\nfiles:\n  - url: ' + dmg + '\n    sha512: ' + sha512 + '\n    size: ' + size + '\npath: ' + dmg + '\nsha512: ' + sha512 + '\nreleaseDate: \'' + new Date().toISOString() + '\'\n';
-          const ymlFiles = files.filter(f => f.endsWith('.yml'));
-          console.log('YML files found:', ymlFiles);
-          for (const ymlFile of ymlFiles) {
-            fs.writeFileSync(path.join(dir, ymlFile), yml);
-            console.log('Patched', ymlFile, '-> DMG:', dmg);
-          }
-          "
-
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:

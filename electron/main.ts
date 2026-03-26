@@ -136,9 +136,9 @@ function setupUpdater(win: BrowserWindow) {
   });
 
   ipcMain.handle('install-update', () => {
-    if (process.platform === 'darwin' && downloadedFile) {
-      // Unsigned macOS apps can't self-replace — open the DMG so the user can drag-install
-      shell.openPath(downloadedFile).catch(() => shell.showItemInFolder(downloadedFile));
+    if (process.platform === 'darwin') {
+      // Unsigned macOS apps can't self-replace — send user to GitHub releases for manual install
+      shell.openExternal('https://github.com/msoehl/OpsLink/releases/tag/dev-latest');
       return;
     }
     try {
