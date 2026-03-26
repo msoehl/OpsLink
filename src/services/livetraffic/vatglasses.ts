@@ -62,7 +62,7 @@ function featureToRings(f: FirFeature): [number, number][][] {
 export async function fetchControllerSectors(
   controllers: VatsimController[],
 ): Promise<ControllerSector[]> {
-  const ctrCtrl = controllers.filter(c => c.facility === 6);
+  const ctrCtrl = controllers.filter(c => c.facility === 6 || c.facility === 7);
   if (ctrCtrl.length === 0) return [];
 
   const firs = await loadFirBoundaries();
