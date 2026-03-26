@@ -468,7 +468,7 @@ function PositionForm({ callsign, destIcao, cruiseFl, onSend }: {
     if (!to) {
       if (cpdlcStation) setTo(cpdlcStation);
       else {
-        const ctr = enrouteAtc.find(c => c.facility === 6);
+        const ctr = enrouteAtc.find(c => c.facility === 6 || c.facility === 7);
         if (ctr) setTo(ctr.callsign);
       }
     }
@@ -991,10 +991,10 @@ function CpdlcForm({ callsign, onSend }: {
           </>
         )}
       </div>
-      {!cpdlcStation && !pendingStation && enrouteAtc.filter(c => c.facility === 6).length > 0 && (
+      {!cpdlcStation && !pendingStation && enrouteAtc.filter(c => c.facility === 6 || c.facility === 7).length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] text-gray-500 shrink-0">Enroute:</span>
-          {enrouteAtc.filter(c => c.facility === 6).map(c => (
+          {enrouteAtc.filter(c => c.facility === 6 || c.facility === 7).map(c => (
             <button key={c.callsign} onClick={() => setStationInput(c.callsign)}
               className={clsx('flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-mono border transition-colors',
                 stationInput === c.callsign
