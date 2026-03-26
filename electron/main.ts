@@ -130,7 +130,13 @@ function setupUpdater(win: BrowserWindow) {
     autoUpdater.allowPrerelease = preRelease;
   });
 
-  ipcMain.handle('install-update', () => autoUpdater.quitAndInstall());
+  ipcMain.handle('install-update', () => {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+    } catch (err) {
+      send('error', 'Neustart fehlgeschlagen — bitte manuell neu starten.');
+    }
+  });
 }
 
 app.whenReady().then(() => {
