@@ -6,6 +6,7 @@ import { useFlightTracking } from './hooks/useFlightTracking';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
+import { Zap } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import MapPage from './pages/Map';
 import FlightPlan from './pages/FlightPlan';
@@ -29,6 +30,14 @@ function PageContent() {
 export default function App() {
   const { theme, updateChannel } = useEFBStore();
   const [offline, setOffline] = useState(!navigator.onLine);
+  const [updateReady, setUpdateReady] = useState(false);
+
+  useEffect(() => {
+    const cleanup = window.electronAPI?.onUpdateStatus?.(({ status }) => {
+      if (status === 'downloaded') setUpdateReady(true);
+    });
+    return () => { cleanup?.(); };
+  }, []);
 
   useAcarsPolling();
   useSimPosition();
@@ -62,6 +71,23 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--c-base)]">
+      {updateReady && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
+          <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-xl p-8 max-w-sm w-full mx-4 text-center space-y-4">
+            <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center mx-auto">
+              <Zap size={24} className="text-white" />
+            </div>
+            <h2 className="text-white font-semibold text-lg">Update verfügbar</h2>
+            <p className="text-gray-400 text-sm">Eine neue Version von OpsLink wurde heruntergeladen und ist bereit zur Installation.</p>
+            <button
+              onClick={() => window.electronAPI?.installUpdate?.()}
+              className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              <Zap size={16} /> Jetzt neu starten & installieren
+            </button>
+          </div>
+        </div>
+      )}
       {offline && (
         <div className="shrink-0 bg-amber-500/10 border-b border-amber-500/30 px-4 py-1.5 text-center text-xs text-amber-400">
           No internet connection — live data unavailable
