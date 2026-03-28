@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { useMessageActions } from './hooks/useMessageActions';
 import { useEFBStore } from '../../store/efbStore';
 import {
-  hoppiePoll, hoppieSend, hoppieStationOnline, hoppieOnlineStations,
+  hoppieSend, hoppieStationOnline, hoppieOnlineStations,
   parseCpdlc, buildCpdlcPacket, cpdlcNeedsResponse,
   type HoppieMessage,
 } from '../../services/hoppie';
-import { fetchVatsimATIS, fetchAllVatsimATIS, type ATISResult } from '../../services/atis/vatsim';
-import { fetchIvaoATIS, fetchAllIvaoATIS } from '../../services/atis/ivao';
-import { playIncomingBeep, playCpdlcChime, playOpsBeep } from '../../services/audio';
+import { fetchAllVatsimATIS, type ATISResult } from '../../services/atis/vatsim';
+import { fetchAllIvaoATIS } from '../../services/atis/ivao';
 import {
   MessageSquare, Send, Loader2, CheckCircle, AlertCircle, Radio, Wifi, Globe,
   MapPin, Plane, Building2, ClipboardList, Search, Volume2, VolumeX, BookmarkPlus, X,
@@ -254,14 +254,14 @@ function PDCForm({ depIcao, destIcao, atcCallsign, acType, route, onSend }: {
   );
 }
 
-function DAtisForm({ airports, hoppieLogon, callsign, atisNetwork, onSend, onInject }: {
+function DAtisForm({ airports, hoppieLogon, callsign, onSend, onInject }: {
   airports: string[];
   hoppieLogon: string;
   callsign: string;
-  atisNetwork: 'vatsim' | 'ivao';
   onSend: (to: string, pkt: string) => Promise<void>;
   onInject: (msg: HoppieMessage) => void;
 }) {
+  const atisNetwork = useEFBStore(s => s.atisNetwork);
   // hoppieStations: all Hoppie ATIS stations found per airport
   // networkAvail: airports available via VATSIM/IVAO API
   const [hoppieStations, setHoppieStations] = useState<Record<string, string[]> | null>(null);
@@ -1047,21 +1047,23 @@ function CpdlcForm({ callsign, onSend }: {
 
 export default function AcarsPage() {
   const {
-    ofp, hoppieLogon, atisNetwork, setActivePage,
+    ofp, hoppieLogon, setActivePage,
     acarsMessages, addAcarsMessage, cpdlcStation, nextCpdlcMsgId,
     hoppieConnected, hoppiePolling, hoppieError,
-    simPosition, incrementAcarsUnread,
+    simPosition,
     soundEnabled, setSoundEnabled,
     pendingCpdlcLogon,
-    activeLogbookEntryId, updateLogbookEntry, closeLogbookEntry,
   } = useEFBStore();
   const callsign = ofp?.atc?.callsign ?? '';
-  const autoAtisRef = useRef<Set<string>>(new Set());
+
+  const {
+    sendMsg, replyToMsg, poll, testAllPhaseMessages,
+    respondedIdx,
+    inlineReply, setInlineReply,
+  } = useMessageActions();
 
   const [mode, setMode] = useState<ComposeMode>('cpdlc');
   const [replyTo, setReplyTo] = useState<string | null>(null);
-  const [respondedIdx, setRespondedIdx] = useState<Set<number>>(new Set());
-  const [inlineReply, setInlineReply] = useState<{ idx: number; fob: string; fl: string; eta: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1075,46 +1077,9 @@ export default function AcarsPage() {
     if (pendingCpdlcLogon) setMode('cpdlc');
   }, [pendingCpdlcLogon]);
 
-  async function sendMsg(to: string, type: string, packet: string) {
-    await hoppieSend(hoppieLogon, callsign, to, type, packet);
-    addAcarsMessage({ from: callsign, to, type, packet, isSent: true, receivedAt: new Date() });
-  }
-
   async function respondCpdlc(refMsgId: string, response: string) {
     const id = nextCpdlcMsgId();
     await sendMsg(cpdlcStation, 'cpdlc', buildCpdlcPacket(id, refMsgId, response));
-  }
-
-  function replyToMsg(idx: number, to: string, packet: string) {
-    sendMsg(to, 'telex', packet).catch(() => {});
-    setRespondedIdx(s => new Set(s).add(idx));
-    setInlineReply(null);
-  }
-
-  async function poll() {
-    const s = useEFBStore.getState();
-    const cs = s.ofp?.atc?.callsign ?? '';
-    if (!s.hoppieLogon || !cs) return;
-    s.setHoppiePolling(true);
-    try {
-      const msgs = await hoppiePoll(s.hoppieLogon, cs);
-      if (msgs.length > 0) {
-        msgs.forEach(m => {
-          s.addAcarsMessage(m);
-          if (s.soundEnabled) {
-            if (m.type === 'cpdlc') playCpdlcChime();
-            else if (m.from?.endsWith('_ATIS') || m.from === 'OPSLINKOPS') playOpsBeep();
-            else playIncomingBeep();
-          }
-        });
-        s.incrementAcarsUnread();
-      }
-      s.setHoppieError(null);
-    } catch {
-      s.setHoppieError('Poll failed');
-    } finally {
-      useEFBStore.getState().setHoppiePolling(false);
-    }
   }
 
   if (!hoppieLogon) {
@@ -1155,309 +1120,6 @@ export default function AcarsPage() {
   const defMach  = ofp.aircraft.cruise_tas ? `M${(parseInt(ofp.aircraft.cruise_tas) / 480).toFixed(2)}` : 'M0.82';
   const airports = [depIcao, destIcao, ...(altnIcao ? [altnIcao] : [])];
   const fuelUnits = ofp.general.units?.toUpperCase() === 'LBS' ? 'LBS' : 'KG';
-
-  // ── Auto D-ATIS when < 200 NM from destination ────────────────────────────
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (!simPosition) return;
-    const destLat = parseFloat(ofp.destination.pos_lat);
-    const destLon = parseFloat(ofp.destination.pos_long);
-    if (!isFinite(destLat) || !isFinite(destLon)) return;
-    const dLat = (destLat - simPosition.lat) * Math.PI / 180;
-    const dLon = (destLon - simPosition.lon) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos(simPosition.lat * Math.PI / 180) * Math.cos(destLat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    const distNm = 2 * 3440.065 * Math.asin(Math.sqrt(a));
-    if (distNm < 200 && !autoAtisRef.current.has(destIcao)) {
-      autoAtisRef.current.add(destIcao);
-      const fetchFn = atisNetwork === 'ivao' ? fetchIvaoATIS : fetchVatsimATIS;
-      fetchFn(destIcao).then(result => {
-        if (result && result.lines.length > 0) {
-          const infoLine = result.code ? `INFORMATION ${result.code}\n` : '';
-          const packet = `[AUTO D-ATIS]\n${infoLine}${result.lines.join('\n')}`;
-          addAcarsMessage({ from: `${destIcao}_ATIS`, type: 'telex', packet, receivedAt: new Date() });
-          incrementAcarsUnread();
-          if (soundEnabled) playOpsBeep();
-          if (hoppieLogon && callsign) {
-            hoppieSend(hoppieLogon, `${destIcao}_ATIS`, callsign, 'telex', packet).catch(() => {});
-          }
-        }
-      }).catch(() => {});
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [simPosition]);
-
-  // ── Flight-phase auto messages ─────────────────────────────────────────────
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const phaseRef  = useRef<string>('preflight');
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const firedRef  = useRef<Set<string>>(new Set());
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const opsCallsign = useRef<string>('OPSLINKOPS');
-
-  function nmBetween(lat1: number, lon1: number, lat2: number, lon2: number) {
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    return 2 * 3440.065 * Math.asin(Math.sqrt(a));
-  }
-
-  function injectOps(packet: string) {
-    addAcarsMessage({ from: opsCallsign.current, type: 'telex', packet, receivedAt: new Date() });
-    incrementAcarsUnread();
-    if (soundEnabled) playOpsBeep();
-    if (hoppieLogon && callsign) {
-      hoppieSend(hoppieLogon, opsCallsign.current, callsign, 'telex', packet).catch(() => {});
-    }
-  }
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (!simPosition || !ofp) return;
-    const { altFt, groundspeedKts, verticalSpeedFpm } = simPosition;
-
-    const depLat  = parseFloat(ofp.origin.pos_lat);
-    const depLon  = parseFloat(ofp.origin.pos_long);
-    const destLat = parseFloat(ofp.destination.pos_lat);
-    const destLon = parseFloat(ofp.destination.pos_long);
-    const distToDest   = isFinite(destLat) ? nmBetween(simPosition.lat, simPosition.lon, destLat, destLon) : 999;
-    const distToOrigin = isFinite(depLat)  ? nmBetween(simPosition.lat, simPosition.lon, depLat, depLon)   : 999;
-
-    let phase: string;
-    if (altFt < 800 && groundspeedKts < 5) {
-      phase = distToOrigin < distToDest ? 'preflight' : 'on_block';
-    } else if (altFt < 800 && groundspeedKts >= 5 && groundspeedKts < 80) {
-      phase = distToOrigin < distToDest ? 'taxi_out' : 'taxi_in';
-    } else if (altFt < 800 && groundspeedKts >= 80) {
-      phase = 'takeoff_roll';
-    } else if (altFt >= 800 && verticalSpeedFpm > 300) {
-      phase = 'climb';
-    } else if (altFt >= 800 && verticalSpeedFpm < -500 && distToDest > 80) {
-      phase = 'descent';
-    } else if (altFt >= 800 && distToDest <= 80) {
-      phase = 'approach';
-    } else if (altFt >= 10000 && Math.abs(verticalSpeedFpm) <= 300 && groundspeedKts > 150) {
-      phase = 'cruise';
-    } else {
-      phase = phaseRef.current;
-    }
-
-    const prev = phaseRef.current;
-    if (phase === prev) return;
-    phaseRef.current = phase;
-
-    // Update logbook phase history
-    if (activeLogbookEntryId) {
-      const s = useEFBStore.getState();
-      const entry = s.logbookEntries.find(e => e.id === activeLogbookEntryId);
-      if (entry) {
-        const phaseHistory = [...entry.phaseHistory, { phase, time: utcNow() }];
-        updateLogbookEntry(activeLogbookEntryId, { phaseHistory });
-        if (phase === 'taxi_out') updateLogbookEntry(activeLogbookEntryId, { offBlockUtc: utcNow() });
-        if (phase === 'on_block') {
-          updateLogbookEntry(activeLogbookEntryId, {
-            onBlockUtc: utcNow(),
-            simulator: (simPosition as { source?: 'msfs' | 'p3d' | 'xplane' }).source ?? null,
-          });
-          closeLogbookEntry();
-        }
-      }
-    }
-
-    const cs  = ofp.atc.callsign;
-    const dep = ofp.origin.icao_code;
-    const dst = ofp.destination.icao_code;
-    const u   = ofp.general.units?.toUpperCase() === 'LBS' ? 'LBS' : 'KG';
-    const acr = ofp.aircraft.reg ?? acType;
-
-    const fire = (key: string, msg: string) => {
-      if (firedRef.current.has(key)) return;
-      firedRef.current.add(key);
-      injectOps(msg);
-    };
-
-    if (phase === 'preflight') {
-      fire('pax_brief', [
-        'PAX / LOAD BRIEF',
-        `FLIGHT ${cs}  ${dep}-${dst}`,
-        `AIRCRAFT ${acr}  ${acType}`,
-        `PAX               ${ofp.weights.pax_count ?? '—'}`,
-        `BAGS              ${ofp.weights.bag_count ?? '—'}`,
-        `PAYLOAD           ${ofp.weights.payload ?? '—'} ${u}`,
-        `EST ZFW           ${ofp.weights.est_zfw ?? '—'} ${u}`,
-        `EST TOW           ${ofp.weights.est_tow ?? '—'} ${u}`,
-        `RAMP FUEL         ${ofp.fuel.plan_ramp ?? '—'} ${u}`,
-        'LOADSHEET SIGNED — READY FOR BOARDING',
-      ].join('\n'));
-    }
-
-    if (phase === 'taxi_out') {
-      fire('taxi_out', [
-        'DEPARTURE INFORMATION',
-        `FLIGHT ${cs}  ${dep}-${dst}`,
-        `AIRCRAFT ${acr}  ${acType}`,
-        'SLOT/CTOT AS FILED',
-        'PRE-DEPARTURE CLEARANCE AVAILABLE ON REQUEST',
-        'HAVE A SAFE DEPARTURE',
-      ].join('\n'));
-    }
-
-    if (phase === 'climb') {
-      fire('airborne', [
-        'AIRBORNE NOTIFICATION',
-        `FLIGHT ${cs}  ${dep}-${dst}`,
-        `AIRBORNE TIME  ${utcNow()}`,
-        `ETA ${dst}  ${utcPlus(parseInt(ofp.times.est_time_enroute || '7200') / 60 - (Date.now() / 60000 % 10))}`,
-        'REPORT WHEN LEVEL',
-      ].join('\n'));
-    }
-
-    if (phase === 'cruise') {
-      fire('cruise_check', [
-        'CRUISE CHECK REQUEST',
-        `FLIGHT ${cs}  ${dep}-${dst}`,
-        'PLEASE REPORT:',
-        `  FOB (${u})`,
-        '  CURRENT LEVEL',
-        `  ETA ${dst}`,
-        'THANK YOU',
-      ].join('\n'));
-
-      const etaMin = groundspeedKts > 0 ? Math.round(distToDest / groundspeedKts * 60) : 90;
-      const totalPax = Math.floor(Math.random() * 25 + 3);
-      const pax1 = Math.floor(totalPax * 0.55);
-      const pax2 = totalPax - pax1;
-      const airline = cs.replace(/\d.*$/, '');
-      fire('connex', [
-        'CONNEX SCHEDULE',
-        `FLIGHT ${cs}  ${dep}-${dst}`,
-        `TOTAL CONNEX PAX  ${totalPax}`,
-        '',
-        `FROM ${airline}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin - 8)}   ${pax1} PAX`,
-        `FROM ${airline}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin + 12)}  ${pax2} PAX`,
-        '',
-        'MIN CONNECT TIME  45 MIN',
-        ...(pax2 > 8 ? ['NOTE PRIORITY OFFLOAD RECOMMENDED'] : []),
-      ].join('\n'));
-    }
-
-    if (phase === 'descent') {
-      fire('descent_wx', [
-        'DESTINATION WEATHER ADVISORY',
-        `FLIGHT ${cs}  APPROACHING ${dst}`,
-        'CURRENT CONDITIONS ON REQUEST',
-        'RECOMMEND REQUEST D-ATIS VIA ACARS',
-        'EXPECT ILS APPROACH',
-        'HAVE A SAFE DESCENT',
-      ].join('\n'));
-    }
-
-    if (phase === 'approach') {
-      const gates = ['A', 'B', 'C', 'D', 'E'];
-      const arrGate = `${gates[Math.floor(Math.random() * gates.length)]}${Math.floor(Math.random() * 40 + 1)}`;
-      fire('gate_approach', [
-        'GATE ASSIGNMENT',
-        `FLIGHT ${cs}  ${dep}-${dst}`,
-        `ARR GATE/STAND  ${arrGate}`,
-        `ETA             ${utcPlus(Math.round(distToDest / (groundspeedKts || 250) * 60))}`,
-        'HANDLING TEAM NOTIFIED',
-        'WELCOME TO ' + dst,
-      ].join('\n'));
-    }
-
-    if (phase === 'taxi_in') {
-      fire('landed', [
-        'LANDING ACKNOWLEDGEMENT',
-        `FLIGHT ${cs}  LANDED ${dst}`,
-        `LANDING TIME  ${utcNow()}`,
-        'PLEASE REPORT BLOCK IN TIME',
-        'GROUND HANDLING STANDING BY',
-      ].join('\n'));
-    }
-
-    if (phase === 'on_block' && distToDest < 15) {
-      const planRamp = ofp.fuel.plan_ramp  ?? '—';
-      const planLand = ofp.fuel.plan_land  ?? '—';
-      const enrtBurn = ofp.fuel.enroute_burn ?? '—';
-      const taxiFuel = ofp.fuel.taxi       ?? '—';
-      fire('on_block', [
-        'BLOCK IN / FUEL UPLIFT REQUEST',
-        `FLIGHT ${cs}  ${dep}-${dst}`,
-        `BLOCK IN TIME      ${utcNow()}`,
-        '',
-        '── FUEL SUMMARY ──────────────────',
-        `PLANNED RAMP       ${planRamp} ${u}`,
-        `PLANNED LAND       ${planLand} ${u}`,
-        `ENROUTE BURN       ${enrtBurn} ${u}`,
-        `TAXI BURN          ${taxiFuel} ${u}`,
-        '',
-        '── UPLIFT REQUEST ────────────────',
-        `TARGET RAMP FUEL   ${planRamp} ${u}`,
-        'PLEASE ARRANGE FUEL UPLIFT',
-        'CONFIRM ACTUAL FOB AND DEFECTS',
-      ].join('\n'));
-
-      const pax = ofp.weights.pax_count ?? '—';
-      fire('meals_reminder', [
-        'CATERING / CREW MEALS',
-        `FLIGHT ${cs}  ${dep}-${dst}`,
-        `TOTAL PAX    ${pax}`,
-        'PLEASE CONFIRM CATERING UPLIFT',
-        'ADVISE ANY SPECIAL MEAL CHANGES',
-      ].join('\n'));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [simPosition]);
-
-  function testAllPhaseMessages() {
-    if (!ofp) return;
-    firedRef.current.clear();
-    const cs = ofp.atc.callsign;
-    const dep = ofp.origin.icao_code;
-    const dst = ofp.destination.icao_code;
-    const u   = fuelUnits;
-    const acr = ofp.aircraft.reg ?? acType;
-    const etaMin = 90;
-    const messages: string[] = [
-      ['PAX / LOAD BRIEF', `FLIGHT ${cs}  ${dep}-${dst}`, `AIRCRAFT ${acr}  ${acType}`,
-        `PAX               ${ofp.weights.pax_count ?? '—'}`, `BAGS              ${ofp.weights.bag_count ?? '—'}`,
-        `PAYLOAD           ${ofp.weights.payload ?? '—'} ${u}`, `EST ZFW           ${ofp.weights.est_zfw ?? '—'} ${u}`,
-        `EST TOW           ${ofp.weights.est_tow ?? '—'} ${u}`, `RAMP FUEL         ${ofp.fuel.plan_ramp ?? '—'} ${u}`,
-        'LOADSHEET SIGNED — READY FOR BOARDING'].join('\n'),
-      ['DEPARTURE INFORMATION', `FLIGHT ${cs}  ${dep}-${dst}`, `AIRCRAFT ${acr}  ${acType}`,
-        'SLOT/CTOT AS FILED', 'PRE-DEPARTURE CLEARANCE AVAILABLE ON REQUEST', 'HAVE A SAFE DEPARTURE'].join('\n'),
-      ['AIRBORNE NOTIFICATION', `FLIGHT ${cs}  ${dep}-${dst}`,
-        `AIRBORNE TIME  ${utcNow()}`, `ETA ${dst}  ${utcPlus(etaMin)}`, 'REPORT WHEN LEVEL'].join('\n'),
-      ['CRUISE CHECK REQUEST', `FLIGHT ${cs}  ${dep}-${dst}`, 'PLEASE REPORT:',
-        `  FOB (${u})`, '  CURRENT LEVEL', `  ETA ${dst}`, 'THANK YOU'].join('\n'),
-      ['CONNEX SCHEDULE', `FLIGHT ${cs}  ${dep}-${dst}`, 'TOTAL CONNEX PAX  18', '',
-        `FROM ${cs.replace(/\d.*$/, '')}456  ARR ${utcPlus(etaMin - 8)}   10 PAX`,
-        `FROM ${cs.replace(/\d.*$/, '')}789  ARR ${utcPlus(etaMin + 12)}   8 PAX`, '',
-        'MIN CONNECT TIME  45 MIN', 'NOTE PRIORITY OFFLOAD RECOMMENDED'].join('\n'),
-      ['DESTINATION WEATHER ADVISORY', `FLIGHT ${cs}  APPROACHING ${dst}`,
-        'CURRENT CONDITIONS ON REQUEST', 'RECOMMEND REQUEST D-ATIS VIA ACARS',
-        'EXPECT ILS APPROACH', 'HAVE A SAFE DESCENT'].join('\n'),
-      ['GATE ASSIGNMENT', `FLIGHT ${cs}  ${dep}-${dst}`,
-        'ARR GATE/STAND  B14', `ETA             ${utcPlus(20)}`, 'HANDLING TEAM NOTIFIED', `WELCOME TO ${dst}`].join('\n'),
-      ['LANDING ACKNOWLEDGEMENT', `FLIGHT ${cs}  LANDED ${dst}`,
-        `LANDING TIME  ${utcNow()}`, 'PLEASE REPORT BLOCK IN TIME', 'GROUND HANDLING STANDING BY'].join('\n'),
-      ['BLOCK IN / FUEL UPLIFT REQUEST', `FLIGHT ${cs}  ${dep}-${dst}`,
-        `BLOCK IN TIME      ${utcNow()}`, '',
-        '── FUEL SUMMARY ──────────────────',
-        `PLANNED RAMP       ${ofp.fuel.plan_ramp ?? '—'} ${u}`,
-        `PLANNED LAND       ${ofp.fuel.plan_land ?? '—'} ${u}`,
-        `ENROUTE BURN       ${ofp.fuel.enroute_burn ?? '—'} ${u}`,
-        `TAXI BURN          ${ofp.fuel.taxi ?? '—'} ${u}`, '',
-        '── UPLIFT REQUEST ────────────────',
-        `TARGET RAMP FUEL   ${ofp.fuel.plan_ramp ?? '—'} ${u}`,
-        'PLEASE ARRANGE FUEL UPLIFT', 'CONFIRM ACTUAL FOB AND DEFECTS'].join('\n'),
-      ['CATERING / CREW MEALS', `FLIGHT ${cs}  ${dep}-${dst}`,
-        `TOTAL PAX    ${ofp.weights.pax_count ?? '—'}`,
-        'PLEASE CONFIRM CATERING UPLIFT', 'ADVISE ANY SPECIAL MEAL CHANGES'].join('\n'),
-    ];
-    messages.forEach((pkt, i) => setTimeout(() => injectOps(pkt), i * 400));
-  }
 
   // Filter messages by search
   const filteredMessages = searchQuery.trim()
@@ -1741,7 +1403,7 @@ export default function AcarsPage() {
               onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }} />
           )}
           {mode === 'datis' && (
-            <DAtisForm airports={airports} hoppieLogon={hoppieLogon} callsign={callsign} atisNetwork={atisNetwork}
+            <DAtisForm airports={airports} hoppieLogon={hoppieLogon} callsign={callsign}
               onSend={async (to, pkt) => { await sendMsg(to, 'telex', pkt); }}
               onInject={(msg) => {
                 addAcarsMessage(msg);

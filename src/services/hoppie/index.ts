@@ -35,11 +35,17 @@ export function cpdlcNeedsResponse(parsed: CpdlcParsed): boolean {
 
 const BASE = 'https://www.hoppie.nl/acars/system/connect.html';
 
+let _lastPollAt = 0;
+const MIN_POLL_INTERVAL_MS = 10_000;
+
 function buildUrl(params: Record<string, string>): string {
   return `${BASE}?${new URLSearchParams(params).toString()}`;
 }
 
 export async function hoppiePoll(logon: string, callsign: string): Promise<HoppieMessage[]> {
+  const now = Date.now();
+  if (now - _lastPollAt < MIN_POLL_INTERVAL_MS) return [];
+  _lastPollAt = now;
   const url = buildUrl({ logon, from: callsign, type: 'poll' });
   const res = await fetch(url);
   const text = await res.text();

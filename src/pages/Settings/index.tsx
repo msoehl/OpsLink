@@ -3,7 +3,7 @@ import { useEFBStore } from '../../store/efbStore';
 import { fetchOFP } from '../../services/simbrief/api';
 import { Loader2, CheckCircle, AlertCircle, Settings, RefreshCw, Zap } from 'lucide-react';
 
-type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'error' | 'progress' | 'downloaded';
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'error' | 'progress' | 'downloaded' | 'info';
 
 function UpdateSection() {
   const { updateChannel, setUpdateChannel } = useEFBStore();
@@ -14,11 +14,12 @@ function UpdateSection() {
   useEffect(() => {
     const cleanup = window.electronAPI?.onUpdateStatus?.(({ status: s, info: i }) => {
       setStatus(prev => {
-        if (prev === 'downloaded' && s !== 'downloaded') return prev;
+        if (prev === 'downloaded' && s !== 'downloaded' && s !== 'info') return prev;
         if (s === 'available')       setInfo(`v${(i as { version: string })?.version ?? ''} verfügbar`);
         else if (s === 'progress')   setInfo(`${i}%`);
         else if (s === 'error')      setInfo(String(i));
         else if (s === 'downloaded') setInfo('Bereit zur Installation');
+        else if (s === 'info')       setInfo(String(i));
         else                         setInfo('');
         if (s === 'not-available' || s === 'available' || s === 'error') setLastChecked(new Date());
         return s as UpdateStatus;
@@ -26,6 +27,15 @@ function UpdateSection() {
     });
     return () => { cleanup?.(); };
   }, []);
+
+  function switchChannel(ch: 'dev' | 'stable') {
+    if (ch === updateChannel) return;
+    setUpdateChannel(ch);
+    window.electronAPI?.setUpdateChannel?.(ch);
+    setStatus('idle');
+    setInfo('');
+    setLastChecked(null);
+  }
 
   const lastCheckedLabel = lastChecked
     ? `Last checked: ${lastChecked.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
@@ -35,22 +45,26 @@ function UpdateSection() {
     <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
       <h3 className="text-sm font-semibold text-white mb-1">Updates</h3>
       <p className="text-xs text-gray-500 mb-3">Check for new versions of OpsLink.</p>
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-xs text-gray-400 w-28 shrink-0">Update Channel</span>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setUpdateChannel('dev')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              updateChannel === 'dev'
-                ? 'bg-amber-600 text-white'
-                : 'bg-[var(--c-depth)] border border-[var(--c-border)] text-gray-400 hover:border-[var(--c-border2)]'
-            }`}>
-            Dev (Pre-release)
-          </button>
-          <button disabled title="No stable release available yet"
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--c-depth)] border border-[var(--c-border)] text-gray-600 cursor-not-allowed">
-            Stable (soon)
-          </button>
+      <div className="flex items-start gap-2 mb-4">
+        <span className="text-xs text-gray-400 w-28 shrink-0 pt-1.5">Update Channel</span>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex gap-2">
+            {(['dev', 'stable'] as const).map(ch => (
+              <button
+                key={ch}
+                onClick={() => switchChannel(ch)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  updateChannel === ch
+                    ? ch === 'dev' ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white'
+                    : 'bg-[var(--c-depth)] border border-[var(--c-border)] text-gray-400 hover:border-[var(--c-border2)]'
+                }`}>
+                {ch === 'dev' ? 'Dev (Pre-release)' : 'Stable'}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-gray-600">
+            Ein Kanalwechsel erfordert eine Neuinstallation aus dem neuen Kanal.
+          </p>
         </div>
       </div>
       <div className="flex items-center gap-3 flex-wrap">
@@ -88,6 +102,9 @@ function UpdateSection() {
         )}
         {status === 'downloaded' && (
           <span className="text-xs text-green-400">Update downloaded</span>
+        )}
+        {status === 'info' && info && (
+          <span className="text-xs text-blue-400">{info}</span>
         )}
       </div>
 

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
 import { useEFBStore } from '../../store/efbStore';
 import RouteMap from '../../components/map/RouteMap';
 import type { NavlogFix } from '../../types/simbrief';
@@ -7,9 +8,9 @@ import { fetchIvaoTraffic } from '../../services/livetraffic/ivao';
 import { fetchVatsimControllers, type VatsimController } from '../../services/livetraffic/vatsimAtc';
 import { fetchIvaoControllers } from '../../services/livetraffic/ivaoAtc';
 import { filterEnrouteControllers } from '../../services/livetraffic/enrouteAtc';
-import { fetchControllerSectors, type ControllerSector } from '../../services/livetraffic/vatglasses';
+import { fetchControllerSectors, type ControllerSector, RateLimitError } from '../../services/livetraffic/vatglasses';
 import type { EnrouteController } from '../../services/livetraffic/enrouteAtc';
-import { Globe, Radio, Loader2, WifiOff, Joystick, Navigation, Trash2, Headphones, Copy, Check, LogIn } from 'lucide-react';
+import { Globe, Radio, Loader2, WifiOff, Joystick, Navigation, Trash2, Headphones, Copy, Check, LogIn, Crosshair } from 'lucide-react';
 
 const REFRESH_INTERVAL = 30_000;
 const BOUNDS_PAD = 4;
@@ -150,7 +151,10 @@ export default function MapPage() {
   const [atc, setAtc] = useState<VatsimController[]>([]);
   const [atcRaw, setAtcRaw] = useState(0);
   const [sectorPolygons, setSectorPolygons] = useState<ControllerSector[]>([]);
+  const [sectorError, setSectorError] = useState<string | null>(null);
   const atcIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const handleMapReady = useCallback((map: L.Map) => { mapRef.current = map; }, []);
 
   const fixes: NavlogFix[] = ofp
     ? Array.isArray(ofp.navlog?.fix)
@@ -174,6 +178,8 @@ export default function MapPage() {
     },
     { minLat: 90, maxLat: -90, minLon: 180, maxLon: -180 },
   );
+
+  const routeKey = ofp ? `${ofp.origin.icao_code}-${ofp.destination.icao_code}` : '';
 
   async function loadTraffic() {
     if (!trafficEnabled) return;
@@ -215,7 +221,14 @@ export default function MapPage() {
         const visible = controllers.filter(c =>
           isFinite(c.latitude) && isFinite(c.longitude) && !(c.latitude === 0 && c.longitude === 0)
         );
-        fetchControllerSectors(visible).then(setSectorPolygons).catch(() => {});
+        fetchControllerSectors(visible)
+          .then(sectors => { setSectorPolygons(sectors); setSectorError(null); })
+          .catch(e => {
+            if (e instanceof RateLimitError) {
+              setSectorError('GitHub rate limit — sector polygons unavailable');
+            }
+            setSectorPolygons([]);
+          });
       }
     } catch {
       setAtcRaw(0);
@@ -329,6 +342,12 @@ export default function MapPage() {
             </span>
           )}
 
+          {sectorError && (
+            <span className="text-xs text-amber-500 font-mono" title={sectorError}>
+              ⚠ Sectors
+            </span>
+          )}
+
           {(simConnected || simPosition) && (
             <div className="flex items-center gap-1.5 text-xs">
               <Joystick size={12} className={simConnected ? 'text-green-400' : 'text-gray-600'} />
@@ -338,6 +357,20 @@ export default function MapPage() {
               </span>
             </div>
           )}
+
+          <button
+            onClick={() => {
+              if (!mapRef.current || fixes.length === 0) return;
+              const validFixes = fixes.filter(f => f.pos_lat !== '0.000000' && f.pos_long !== '0.000000');
+              if (validFixes.length < 2) return;
+              const latLngs = validFixes.map(f => [parseFloat(f.pos_lat), parseFloat(f.pos_long)] as [number, number]);
+              mapRef.current.fitBounds(latLngs, { padding: [40, 40] });
+            }}
+            title="Center on route"
+            className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border border-[var(--c-border)] text-gray-500 hover:text-white hover:border-[var(--c-border2)] transition-colors"
+          >
+            <Crosshair size={12} />
+          </button>
 
           {simPosition && simTrail.length > 0 && (
             <button
@@ -415,6 +448,8 @@ export default function MapPage() {
               showTrail={trailEnabled}
               controllers={atcVisible}
               sectorPolygons={atcEnabled ? sectorPolygons : []}
+              routeKey={routeKey}
+              onMapReady={handleMapReady}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500 text-sm">

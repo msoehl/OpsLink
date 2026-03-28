@@ -105,6 +105,22 @@ body {
 .leaflet-tooltip-left::before   { border-left-color:   var(--c-border) !important; }
 .leaflet-tooltip-right::before  { border-right-color:  var(--c-border) !important; }
 
+/* CTR sector label — plain teal text centered on the polygon, no bubble */
+.ctr-sector-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #2dd4bf !important;
+  font-family: monospace !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  padding: 0 !important;
+  text-shadow: 0 0 4px #000, 0 0 2px #000 !important;
+  pointer-events: none !important;
+}
+.ctr-sector-label::before { display: none !important; }
+
 /* Light mode text overrides — Tailwind utilities don't respond to theme automatically */
 [data-theme="light"] .text-white          { color: var(--c-text)  !important; }
 [data-theme="light"] .text-gray-100       { color: var(--c-text)  !important; }

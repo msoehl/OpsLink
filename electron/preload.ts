@@ -2,14 +2,16 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   fetchAvwxMetar:   (icao: string)  => ipcRenderer.invoke('fetch-avwx-metar', icao),
+  fetchGeojson:     (url: string)   => ipcRenderer.invoke('fetch-geojson', url),
   openExternal:     (url: string)   => ipcRenderer.invoke('open-external', url),
   checkForUpdates:  ()              => ipcRenderer.invoke('check-for-updates'),
   setUpdateChannel: (ch: string)    => ipcRenderer.invoke('set-update-channel', ch),
   downloadUpdate:   ()              => ipcRenderer.invoke('download-update'),
   installUpdate:    ()              => ipcRenderer.invoke('install-update'),
   onUpdateStatus:   (cb: (payload: { status: string; info?: unknown }) => void) => {
-    ipcRenderer.on('update-status', (_e, payload) => cb(payload));
-    return () => ipcRenderer.removeAllListeners('update-status');
+    const listener = (_e: unknown, payload: { status: string; info?: unknown }) => cb(payload);
+    ipcRenderer.on('update-status', listener);
+    return () => ipcRenderer.removeListener('update-status', listener);
   },
   onSimPosition: (cb: (pos: unknown) => void) => {
     ipcRenderer.on('sim:position', (_e, pos) => cb(pos));

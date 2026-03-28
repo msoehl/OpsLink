@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Circle, Tooltip, Marker, Popup, Polygon, useMap } from 'react-leaflet';
 import type { LatLngTuple } from 'leaflet';
 import L from 'leaflet';
@@ -23,15 +23,31 @@ interface Props {
   showTrail?: boolean;
   controllers?: VatsimController[];
   sectorPolygons?: ControllerSector[];
+  routeKey?: string;
+  onMapReady?: (map: L.Map) => void;
 }
 
-function FitBounds({ positions }: { positions: LatLngTuple[] }) {
+function FitBounds({ positions, routeKey }: { positions: LatLngTuple[]; routeKey: string }) {
   const map = useMap();
+  const firedRef = useRef(false);
+  const lastKeyRef = useRef('');
+
   useEffect(() => {
-    if (positions.length > 1) {
-      map.fitBounds(positions, { padding: [40, 40] });
+    if (routeKey !== lastKeyRef.current) {
+      lastKeyRef.current = routeKey;
+      firedRef.current = false;
     }
-  }, [map, positions]);
+    if (!firedRef.current && positions.length > 1) {
+      map.fitBounds(positions, { padding: [40, 40] });
+      firedRef.current = true;
+    }
+  }, [map, positions, routeKey]);
+  return null;
+}
+
+function MapReadyEmitter({ onReady }: { onReady: (map: L.Map) => void }) {
+  const map = useMap();
+  useEffect(() => { onReady(map); }, [map, onReady]);
   return null;
 }
 
@@ -91,14 +107,26 @@ interface AtcGroup {
   maxVisualRange: number;
 }
 
+const CTR_TYPE_SUFFIXES = new Set(['CTR', 'FSS', 'FIR', 'UIR', 'OCEANIC']);
+
+
+function ctrLabel(callsign: string): string {
+  const parts = callsign.split('_');
+  const prefix = parts[0].toUpperCase();
+  if (parts.length >= 3 && !CTR_TYPE_SUFFIXES.has(parts[1].toUpperCase()))
+    return `${prefix}-${parts[1].toUpperCase()}`;
+  return prefix;
+}
+
 function groupControllers(controllers: VatsimController[]): AtcGroup[] {
   const map = new Map<string, AtcGroup>();
   for (const c of controllers) {
-    // CTR always uses coordinate key so it never merges into an airport group
-    const key = c.facility === 6
-      ? `ctr:${c.latitude.toFixed(2)},${c.longitude.toFixed(2)}`
-      : (c.icao ?? `${c.latitude.toFixed(3)},${c.longitude.toFixed(3)}`);
-    const label = c.icao ?? c.callsign.split('_')[0];
+    // CTR: each callsign gets its own marker keyed by its label (sub-sectors like EDMM-HOF stay separate)
+    // Airport facilities: group by ICAO so DEL/GND/TWR stack under one pin
+    const label = c.facility === 6
+      ? ctrLabel(c.callsign)
+      : (c.icao ?? c.callsign.split('_')[0]);
+    const key = c.facility === 6 ? `ctr:${label}` : label;
     if (!map.has(key)) {
       map.set(key, { key, label, lat: c.latitude, lon: c.longitude, controllers: [], topFacility: 0, maxVisualRange: 0 });
     }
@@ -131,7 +159,7 @@ function AtcTooltipContent({ group }: { group: AtcGroup }) {
   const topColor = facilityColor(group.topFacility);
 
   useEffect(() => {
-    if (tab === 'wx' && group.key.length >= 3) {
+    if (tab === 'wx' && group.topFacility !== 6 && group.key.length >= 3) {
       if (atisList === 'loading') {
         fetchAllVatsimATIS(group.key)
           .then(results => setAtisList(results.length > 0 ? results : 'none'))
@@ -152,17 +180,19 @@ function AtcTooltipContent({ group }: { group: AtcGroup }) {
     <div style={{ fontFamily: 'monospace', fontSize: '11px', lineHeight: '1.6', minWidth: '220px' }}>
       {/* Header */}
       <div style={{ fontWeight: 'bold', color: topColor, fontSize: '12px', marginBottom: '4px' }}>
-        {group.key}
+        {group.label}
         {sorted.length > 1 && (
           <span style={{ color: '#6b7280', fontWeight: 'normal', fontSize: '10px' }}> · {sorted.length} online</span>
         )}
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #374151', marginBottom: '6px' }}>
-        <button style={TAB_STYLE(tab === 'info')} onClick={() => setTab('info')}>Stations</button>
-        <button style={TAB_STYLE(tab === 'wx')} onClick={() => setTab('wx')}>ATIS / METAR</button>
-      </div>
+      {/* Tabs — ATIS/METAR irrelevant for CTR */}
+      {group.topFacility !== 6 && (
+        <div style={{ display: 'flex', borderBottom: '1px solid #374151', marginBottom: '6px' }}>
+          <button style={TAB_STYLE(tab === 'info')} onClick={() => setTab('info')}>Stations</button>
+          <button style={TAB_STYLE(tab === 'wx')} onClick={() => setTab('wx')}>ATIS / METAR</button>
+        </div>
+      )}
 
       {tab === 'info' && (
         <div>
@@ -211,7 +241,7 @@ function AtcTooltipContent({ group }: { group: AtcGroup }) {
   );
 }
 
-export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, alternateLon, alternateIcao, traffic = [], simPosition, showTrail, controllers = [], sectorPolygons = [] }: Props) {
+export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, alternateLon, alternateIcao, traffic = [], simPosition, showTrail, controllers = [], sectorPolygons = [], routeKey, onMapReady }: Props) {
   const { theme, simTrail } = useEFBStore();
   const positions: LatLngTuple[] = fixes
     .filter((f) => f.pos_lat !== '0.000000' && f.pos_long !== '0.000000')
@@ -221,6 +251,7 @@ export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, al
   const midLon = positions.length > 0 ? positions[Math.floor(positions.length / 2)][1] : 10;
 
   const trailPositions: LatLngTuple[] = simTrail.map((p) => [p.lat, p.lon]);
+  const controllerGroups = groupControllers(controllers);
 
   return (
     <MapContainer
@@ -350,42 +381,79 @@ export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, al
         </Marker>
       ))}
 
-      {/* CTR sector polygons — real FIR boundaries from vatspy */}
-      {(sectorPolygons ?? []).flatMap((sector, i) =>
-        sector.rings.map((ring, j) => (
-          <Polygon
-            key={`sector-${i}-${j}`}
-            positions={ring}
-            pathOptions={{ color: '#2dd4bf', fillColor: '#2dd4bf', fillOpacity: 0.07, weight: 1, opacity: 0.5 }}
-          />
-        ))
-      )}
+      {/* Sector polygons — CTR/FSS (teal, vatspy) and APP (lime, simaware-tracon) */}
+      {(sectorPolygons ?? []).flatMap((sector, i) => {
+        const isApp = sector.facility === 5;
+        const color = isApp ? '#bef264' : '#2dd4bf';
+        const pathOptions = { color, fillOpacity: 0, weight: isApp ? 1.5 : 1, opacity: isApp ? 0.7 : 0.5 };
 
-      {/* APP radius circles */}
-      {groupControllers(controllers)
-        .filter(g => g.controllers.some(c => c.facility === 5) && g.maxVisualRange > 0)
-        .map(g => (
-          <Circle
-            key={`app-${g.key}`}
-            center={[g.lat, g.lon]}
-            radius={Math.min(g.maxVisualRange, 20) * 1852}
-            pathOptions={{ color: '#bef264', fillColor: '#bef264', fillOpacity: 0.04, weight: 1, opacity: 0.5 }}
-          />
-        ))}
+        if (!isApp) {
+          // CTR: first ring carries the permanent label + popup; remaining rings are plain
+          const ctrGroup = controllerGroups.find(g =>
+            g.controllers.some(c => c.callsign === sector.callsign)
+          );
+          return sector.rings.map((ring, j) => (
+            <Polygon key={`sector-${i}-${j}`} positions={ring} pathOptions={pathOptions}>
+              {j === 0 && ctrGroup && (
+                <>
+                  <Tooltip permanent className="ctr-sector-label">{ctrGroup.label}</Tooltip>
+                  <Popup offset={[0, 0]} closeButton={false} className="atc-popup">
+                    <AtcTooltipContent group={ctrGroup} />
+                  </Popup>
+                </>
+              )}
+            </Polygon>
+          ));
+        }
+
+        return sector.rings.map((ring, j) => (
+          <Polygon key={`sector-${i}-${j}`} positions={ring} pathOptions={pathOptions} />
+        ));
+      })}
+
+      {/* APP radius circles — fallback where no TRACON polygon available */}
+      {(() => {
+        const polygonCallsigns = new Set(
+          (sectorPolygons ?? []).filter(s => s.facility === 5).map(s => s.callsign)
+        );
+        return controllerGroups
+          .filter(g =>
+            g.controllers.some(c => c.facility === 5 && !polygonCallsigns.has(c.callsign))
+            && g.maxVisualRange > 0
+          )
+          .map(g => (
+            <Circle
+              key={`app-${g.key}`}
+              center={[g.lat, g.lon]}
+              radius={Math.min(g.maxVisualRange, 20) * 1852}
+              pathOptions={{ color: '#bef264', fillColor: '#bef264', fillOpacity: 0.04, weight: 1, opacity: 0.5 }}
+            />
+          ));
+      })()}
 
       {/* VATSIM ATC stations — above traffic */}
-      {groupControllers(controllers).map((group) => (
-        <Marker
-          key={group.key}
-          position={[group.lat, group.lon]}
-          icon={atcGroupIcon(group.label, group.controllers.map(c => c.facility))}
-          zIndexOffset={500}
-        >
-          <Popup offset={[0, -8]} closeButton={false} className="atc-popup">
-            <AtcTooltipContent group={{ ...group, key: group.label }} />
-          </Popup>
-        </Marker>
-      ))}
+      {(() => {
+        const ctrCallsignsWithPolygon = new Set(
+          sectorPolygons.filter(s => s.facility === 6).map(s => s.callsign)
+        );
+        return controllerGroups
+          .filter(group =>
+            // CTR groups whose sector is already labelled on its polygon don't need a separate pin
+            !(group.topFacility === 6 && group.controllers.some(c => ctrCallsignsWithPolygon.has(c.callsign)))
+          )
+          .map((group) => (
+            <Marker
+              key={group.key}
+              position={[group.lat, group.lon]}
+              icon={atcGroupIcon(group.label, group.controllers.map(c => c.facility))}
+              zIndexOffset={500}
+            >
+              <Popup offset={[0, -8]} closeButton={false} className="atc-popup">
+                <AtcTooltipContent group={group} />
+              </Popup>
+            </Marker>
+          ));
+      })()}
 
 
       {/* Simulator own aircraft — shown in amber, always on top */}
@@ -413,7 +481,8 @@ export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, al
         </Marker>
       )}
 
-      <FitBounds positions={positions} />
+      <FitBounds positions={positions} routeKey={routeKey ?? ''} />
+      {onMapReady && <MapReadyEmitter onReady={onMapReady} />}
     </MapContainer>
   );
 }

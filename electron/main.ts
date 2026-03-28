@@ -10,16 +10,24 @@ const __dirname = dirname(__filename);
 
 const isDev = !app.isPackaged;
 
-function fetchJson(url: string): Promise<unknown> {
+function fetchJson(url: string, maxRedirects = 5): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'OpsLink/0.1.0' } }, (res) => {
-      let data = '';
-      res.on('data', (chunk: string) => { data += chunk; });
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(e); }
-      });
-    }).on('error', reject);
+    const doGet = (currentUrl: string, remaining: number) => {
+      https.get(currentUrl, { headers: { 'User-Agent': `OpsLink/${app.getVersion()}` } }, (res) => {
+        if ([301, 302, 307, 308].includes(res.statusCode ?? 0) && res.headers.location && remaining > 0) {
+          res.resume();
+          doGet(res.headers.location, remaining - 1);
+          return;
+        }
+        let data = '';
+        res.on('data', (chunk: string) => { data += chunk; });
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch (e) { reject(e); }
+        });
+      }).on('error', reject);
+    };
+    doGet(url, maxRedirects);
   });
 }
 
@@ -42,6 +50,7 @@ function createWindow(): BrowserWindow {
   });
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const isGitHub = details.url.includes('github.com') || details.url.includes('githubusercontent.com');
     callback({
       responseHeaders: {
         ...details.responseHeaders,
@@ -50,8 +59,9 @@ function createWindow(): BrowserWindow {
           "script-src 'self' 'unsafe-inline'; " +
           "style-src 'self' 'unsafe-inline'; " +
           "img-src 'self' data: blob: https://*.cartocdn.com https://*.tile.openstreetmap.org https://*.amazonaws.com; " +
-          "connect-src 'self' https://data.vatsim.net https://api.ivao.aero https://www.hoppie.nl https://aviationweather.gov https://www.simbrief.com https://*.cartocdn.com https://charts.api.navigraph.com https://identity.api.navigraph.com https://api.vatsim.net https://atc.vatsim.net https://data.ivao.aero https://raw.githubusercontent.com"
+          "connect-src 'self' https://data.vatsim.net https://api.ivao.aero https://www.hoppie.nl https://aviationweather.gov https://www.simbrief.com https://*.cartocdn.com https://charts.api.navigraph.com https://identity.api.navigraph.com https://api.vatsim.net https://atc.vatsim.net https://data.ivao.aero https://raw.githubusercontent.com https://github.com https://objects.githubusercontent.com https://api.github.com"
         ],
+        ...(isGitHub ? { 'Access-Control-Allow-Origin': ['*'] } : {}),
       },
     });
   });
@@ -81,6 +91,16 @@ ipcMain.handle('open-external', (_event, url: string) => {
 
 ipcMain.handle('fetch-avwx-metar', async (_event, icao: string) => {
   const url = `https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(icao)}&format=json`;
+  return fetchJson(url);
+});
+
+ipcMain.handle('fetch-geojson', async (_event, url: string) => {
+  const allowed = [
+    'https://raw.githubusercontent.com/',
+    'https://github.com/vatsimnetwork/',
+    'https://api.github.com/repos/vatsimnetwork/',
+  ];
+  if (typeof url !== 'string' || !allowed.some(p => url.startsWith(p))) return null;
   return fetchJson(url);
 });
 
@@ -133,12 +153,16 @@ function setupUpdater(win: BrowserWindow) {
     const preRelease = channel === 'dev';
     autoUpdater.allowDowngrade  = preRelease;
     autoUpdater.allowPrerelease = preRelease;
+    // Reset so the periodic check runs again after a channel switch
+    updateReady = false;
   });
 
   ipcMain.handle('install-update', () => {
     if (process.platform === 'darwin') {
       // Unsigned macOS apps can't self-replace — send user to GitHub releases for manual install
-      shell.openExternal('https://github.com/msoehl/OpsLink/releases/tag/dev-latest');
+      const tag = isPreRelease ? 'dev-latest' : 'latest';
+      shell.openExternal(`https://github.com/msoehl/OpsLink/releases/tag/${tag}`);
+      send('info', 'Browser geöffnet — bitte manuell installieren.');
       return;
     }
     try {

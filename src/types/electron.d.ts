@@ -4,6 +4,7 @@ declare global {
   interface Window {
     electronAPI?: {
       fetchAvwxMetar:  (icao: string)  => Promise<unknown>;
+      fetchGeojson:    (url: string)   => Promise<unknown>;
       openExternal:    (url: string)   => Promise<void>;
       checkForUpdates:  ()              => Promise<void>;
       downloadUpdate:   ()              => Promise<void>;

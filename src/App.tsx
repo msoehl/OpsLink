@@ -39,6 +39,9 @@ export default function App() {
       if (status === 'downloaded') {
         setUpdateReady(true);
         setForceModal(Date.now() - startTime < 2 * 60 * 1000);
+      } else if (status === 'info') {
+        // macOS: browser was opened for manual install — dismiss force modal
+        setForceModal(false);
       }
     });
     return () => { cleanup?.(); };
