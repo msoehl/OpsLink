@@ -89,12 +89,12 @@ function atcGroupIcon(icao: string, facilities: number[]): L.DivIcon {
     return `<span style="color:${color};font-weight:700;font-size:9px;line-height:1">${letter}</span>`;
   }).join('<span style="color:#374151;font-size:8px;margin:0 1px">|</span>');
 
-  const html = `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:1px;background:rgba(10,10,15,0.88);border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:2px 5px;white-space:nowrap;font-family:monospace;box-shadow:0 1px 4px rgba(0,0,0,0.6)">
+  const html = `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:1px;background:rgba(10,10,15,0.88);border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:2px 5px;white-space:nowrap;font-family:monospace;box-shadow:0 1px 4px rgba(0,0,0,0.6);transform:translate(-50%,-50%)">
     <span style="color:#e5e7eb;font-size:9px;font-weight:700;line-height:1;letter-spacing:0.5px">${icao}</span>
     <div style="display:inline-flex;align-items:center;gap:1px">${chips}</div>
   </div>`;
 
-  return L.divIcon({ html, className: '', iconSize: undefined, iconAnchor: [icao.length * 5 + 4, 20] });
+  return L.divIcon({ html, className: '', iconSize: [0, 0], iconAnchor: [0, 0] });
 }
 
 interface AtcGroup {
