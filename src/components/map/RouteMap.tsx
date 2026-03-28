@@ -110,6 +110,7 @@ interface AtcGroup {
 const CTR_TYPE_SUFFIXES = new Set(['CTR', 'FSS', 'FIR', 'UIR', 'OCEANIC']);
 
 
+
 function ctrLabel(callsign: string): string {
   const parts = callsign.split('_');
   const prefix = parts[0].toUpperCase();
@@ -134,6 +135,15 @@ function groupControllers(controllers: VatsimController[]): AtcGroup[] {
     g.controllers.push(c);
     if (c.facility > g.topFacility) g.topFacility = c.facility;
     if (c.visualRange > g.maxVisualRange) g.maxVisualRange = c.visualRange;
+  }
+  // For airport groups (non-CTR): anchor at lowest-facility controller's position.
+  // DEL/GND/TWR are at the airport; APP may be at the radar approach centre.
+  for (const g of map.values()) {
+    if (g.topFacility < 6) {
+      const anchor = g.controllers.reduce((best, c) => c.facility < best.facility ? c : best);
+      g.lat = anchor.latitude;
+      g.lon = anchor.longitude;
+    }
   }
   return [...map.values()];
 }
@@ -388,21 +398,8 @@ export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, al
         const pathOptions = { color, fillOpacity: 0, weight: isApp ? 1.5 : 1, opacity: isApp ? 0.7 : 0.5 };
 
         if (!isApp) {
-          // CTR: first ring carries the permanent label + popup; remaining rings are plain
-          const ctrGroup = controllerGroups.find(g =>
-            g.controllers.some(c => c.callsign === sector.callsign)
-          );
           return sector.rings.map((ring, j) => (
-            <Polygon key={`sector-${i}-${j}`} positions={ring} pathOptions={pathOptions}>
-              {j === 0 && ctrGroup && (
-                <>
-                  <Tooltip permanent className="ctr-sector-label">{ctrGroup.label}</Tooltip>
-                  <Popup offset={[0, 0]} closeButton={false} className="atc-popup">
-                    <AtcTooltipContent group={ctrGroup} />
-                  </Popup>
-                </>
-              )}
-            </Polygon>
+            <Polygon key={`sector-${i}-${j}`} positions={ring} pathOptions={pathOptions} />
           ));
         }
 
