@@ -21,7 +21,7 @@ export function startSimConnectConnector(
         handle.addToDataDefinition(DEF_ID, 'PLANE LONGITUDE',             'degrees',         SimConnectDataType.FLOAT64);
         handle.addToDataDefinition(DEF_ID, 'PLANE ALTITUDE',              'feet',            SimConnectDataType.FLOAT64);
         handle.addToDataDefinition(DEF_ID, 'PLANE HEADING DEGREES TRUE',  'degrees',         SimConnectDataType.FLOAT64);
-        handle.addToDataDefinition(DEF_ID, 'AIRSPEED TRUE',               'knots',           SimConnectDataType.FLOAT64);
+        handle.addToDataDefinition(DEF_ID, 'GROUND VELOCITY',             'knots',           SimConnectDataType.FLOAT64);
         handle.addToDataDefinition(DEF_ID, 'VERTICAL SPEED',              'feet per minute', SimConnectDataType.FLOAT64);
 
         handle.requestDataOnSimObject(
@@ -52,7 +52,7 @@ export function startSimConnectConnector(
           handle.on('close', () => resolve());
         });
 
-        onStatus(false, null);
+        onStatus(false, source);
       } catch {
         // Not running — wait and retry silently
       }

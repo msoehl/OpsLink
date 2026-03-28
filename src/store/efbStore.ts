@@ -8,6 +8,25 @@ import type { LogbookEntry } from '../types/logbook';
 
 export type EFBPage = 'dashboard' | 'map' | 'flightplan' | 'acars' | 'settings' | 'logbook';
 
+export const OPS_MESSAGES = [
+  // Regular phase messages
+  { key: 'pax_brief',        label: 'PAX / Load Brief',            phase: 'Preflight', special: false },
+  { key: 'meals_reminder',   label: 'Catering / Crew Meals',       phase: 'Preflight', special: false },
+  { key: 'taxi_out',         label: 'Departure Information',        phase: 'Taxi Out',  special: false },
+  { key: 'airborne',         label: 'Airborne Notification',        phase: 'Climb',     special: false },
+  { key: 'top_of_climb',     label: 'Top of Climb',                 phase: 'Cruise',    special: false },
+  { key: 'cruise_check',     label: 'Cruise Check Request',         phase: 'Cruise',    special: false },
+  { key: 'connex',           label: 'Connex Schedule',              phase: 'Cruise',    special: false },
+  { key: 'descent_wx',       label: 'Destination Weather Advisory', phase: 'Descent',   special: false },
+  { key: 'gate_approach',    label: 'Gate Assignment',              phase: 'Approach',  special: false },
+  { key: 'landed',           label: 'Landing Acknowledgement',      phase: 'Taxi In',   special: false },
+  { key: 'on_block',         label: 'Block In / Fuel Uplift',       phase: 'On Block',  special: false },
+  // Special events — only fire when conditions are met
+  { key: 'long_haul',        label: 'Long Haul Briefing',           phase: 'Preflight', special: true  },
+  { key: 'night_departure',  label: 'Night Departure Check',        phase: 'Taxi Out',  special: true  },
+  { key: 'short_turnaround', label: 'Short Turnaround Alert',       phase: 'Preflight', special: true  },
+] as const;
+
 export interface AcarsTemplate {
   id: string;
   name: string;
@@ -111,6 +130,17 @@ interface EFBStore {
   closeLogbookEntry: () => void;
   updateLogbookEntry: (id: string, patch: Partial<LogbookEntry>) => void;
   deleteLogbookEntry: (id: string) => void;
+
+  // Flight phase tracking (session only — survives ACARS tab unmounts)
+  acarsPhase: string;
+  acarsPhasesFired: string[];
+  setAcarsPhase: (phase: string) => void;
+  markAcarsPhaseAsFired: (key: string) => void;
+  resetAcarsPhaseTracking: () => void;
+
+  // OPS auto-message toggles (persisted)
+  enabledOpsMessages: string[];
+  setOpsMessageEnabled: (key: string, enabled: boolean) => void;
 }
 
 export const useEFBStore = create<EFBStore>()(
@@ -122,7 +152,7 @@ export const useEFBStore = create<EFBStore>()(
       simbriefUsername: '',
       setSimbriefUsername: (username) => set({ simbriefUsername: username }),
       ofp: null,
-      setOFP: (ofp) => set({ ofp }),
+      setOFP: (ofp) => set({ ofp, acarsPhase: 'preflight', acarsPhasesFired: [] }),
       isLoadingOFP: false,
       setIsLoadingOFP: (loading) => set({ isLoadingOFP: loading }),
       ofpError: null,
@@ -238,6 +268,19 @@ export const useEFBStore = create<EFBStore>()(
       deleteLogbookEntry: (id) => set(s => ({
         logbookEntries: s.logbookEntries.filter(e => e.id !== id),
       })),
+
+      acarsPhase: 'preflight',
+      acarsPhasesFired: [],
+      setAcarsPhase: (phase) => set({ acarsPhase: phase }),
+      markAcarsPhaseAsFired: (key) => set(s => ({ acarsPhasesFired: [...s.acarsPhasesFired, key] })),
+      resetAcarsPhaseTracking: () => set({ acarsPhase: 'preflight', acarsPhasesFired: [] }),
+
+      enabledOpsMessages: OPS_MESSAGES.map(m => m.key),
+      setOpsMessageEnabled: (key, enabled) => set(s => ({
+        enabledOpsMessages: enabled
+          ? [...s.enabledOpsMessages, key]
+          : s.enabledOpsMessages.filter(k => k !== key),
+      })),
     }),
     {
       name: 'opslink-storage',
@@ -255,6 +298,7 @@ export const useEFBStore = create<EFBStore>()(
         mapAtcEnabled: state.mapAtcEnabled,
         mapTrailEnabled: state.mapTrailEnabled,
         logbookEntries: state.logbookEntries,
+        enabledOpsMessages: state.enabledOpsMessages,
       }),
     }
   )

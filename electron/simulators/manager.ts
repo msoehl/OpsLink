@@ -20,6 +20,10 @@ export function setupSimulatorManager(win: BrowserWindow) {
   const onStatus: StatusCallback = (connected, source) => {
     if (source) {
       if (connected) {
+        // MSFS (KittyHawk) takes priority — if MSFS is already connected, ignore a P3D connect,
+        // and if MSFS connects while P3D was connected, evict P3D.
+        if (source === 'p3d' && connectedSources.has('msfs')) return;
+        if (source === 'msfs') connectedSources.delete('p3d');
         connectedSources.add(source);
       } else {
         connectedSources.delete(source);

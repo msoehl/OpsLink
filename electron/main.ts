@@ -39,6 +39,7 @@ function createWindow(): BrowserWindow {
     minHeight: 600,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     titleBarOverlay: false,
+    roundedCorners: process.platform === 'darwin',
     backgroundColor: '#0a0e1a',
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
