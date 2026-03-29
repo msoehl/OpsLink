@@ -299,6 +299,8 @@ export const useEFBStore = create<EFBStore>()(
         mapTrailEnabled: state.mapTrailEnabled,
         logbookEntries: state.logbookEntries,
         enabledOpsMessages: state.enabledOpsMessages,
+        acarsPhase: state.acarsPhase,
+        acarsPhasesFired: state.acarsPhasesFired,
       }),
     }
   )
