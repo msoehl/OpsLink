@@ -63,7 +63,7 @@ export function useMessageActions(): UseMessageActionsReturn {
   const [inlineReply, setInlineReply] = useState<InlineReply | null>(null);
 
   const autoAtisRef = useRef<Set<string>>(new Set());
-  const opsCallsign = useRef<string>('OPSLINKOPS');
+  const opsCallsign = useRef<string>('OPSLINK');
 
   async function sendMsg(to: string, type: string, packet: string) {
     await hoppieSend(hoppieLogon, callsign, to, type, packet);
@@ -103,7 +103,7 @@ export function useMessageActions(): UseMessageActionsReturn {
           s.addAcarsMessage(m);
           if (s.soundEnabled) {
             if (m.type === 'cpdlc') playCpdlcChime();
-            else if (m.from?.endsWith('_ATIS') || m.from === 'OPSLINKOPS') playOpsBeep();
+            else if (m.from?.endsWith('_ATIS') || m.from === 'OPSLINK') playOpsBeep();
             else playIncomingBeep();
           }
         });
