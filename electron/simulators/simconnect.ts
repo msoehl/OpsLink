@@ -13,12 +13,15 @@ export function startSimConnectConnector(
   let stopped = false;
 
   async function tryConnect(protocol: Protocol, source: 'msfs' | 'p3d') {
-    // For P3D: delay the first connection attempt so MSFS (KittyHawk) can connect
-    // first and take priority. MSFS accepts both protocols — without this delay
-    // the FSX_SP2 connection often wins the race and the UI flashes "P3D" briefly.
-    if (source === 'p3d') await sleep(800);
-
     while (!stopped) {
+      // For P3D: delay every connection attempt so MSFS (KittyHawk) can connect
+      // first and take priority on both initial connect and every reconnect.
+      // MSFS accepts both protocols — without this delay the FSX_SP2 connection
+      // often wins the race and the UI flashes "P3D" briefly.
+      if (source === 'p3d') {
+        await sleep(800);
+        if (stopped) break;
+      }
       try {
         const { handle } = await open('OpsLink', protocol);
 

@@ -178,7 +178,10 @@ function setupUpdater(win: BrowserWindow) {
 app.whenReady().then(() => {
   const win = createWindow();
   setupUpdater(win);
-  setupSimulatorManager(win);
+  const simManager = setupSimulatorManager(win);
+  // Re-broadcast sim status after renderer finishes loading — handles the race
+  // where SimConnect connects before the renderer's IPC listener is registered.
+  win.webContents.on('did-finish-load', () => simManager.sendCurrentStatus());
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

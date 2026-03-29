@@ -42,11 +42,23 @@ export function setupSimulatorManager(win: BrowserWindow) {
     }
   };
 
+  const sendCurrentStatus = () => {
+    const activeSource = connectedSources.size > 0
+      ? [...connectedSources][connectedSources.size - 1]
+      : null;
+    if (!win.isDestroyed()) {
+      win.webContents.send('sim:status', {
+        connected: connectedSources.size > 0,
+        source: activeSource,
+      });
+    }
+  };
+
   const stopSimConnect = startSimConnectConnector(onPosition, onStatus);
   const stopXPlane    = startXPlaneConnector(onPosition, onStatus);
 
-  return () => {
-    stopSimConnect();
-    stopXPlane();
+  return {
+    stop: () => { stopSimConnect(); stopXPlane(); },
+    sendCurrentStatus,
   };
 }
