@@ -22,6 +22,12 @@ function fuelNum(str: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
+/** Fuel checks are only meaningful at named reporting fixes (apt, vor, ndb, wpt).
+ *  Pure lat/lon coordinate steps (ltlg) are skipped. */
+function isReportingFix(fix: NavlogFix): boolean {
+  return fix.type !== 'ltlg';
+}
+
 /** Plan FOB at a fix: prefer fuel_onboard, fall back to plan_takeoff − fuel_totalused */
 function fixFob(fix: NavlogFix, planTof: number): number {
   const direct = fuelNum(fix.fuel_onboard);
@@ -112,6 +118,7 @@ export default function FlightPlan() {
   }
 
   function selectFix(idx: number) {
+    if (!isReportingFix(fixes[idx])) return;
     if (activeFix === idx) {
       setActiveFix(null);
     } else {
@@ -282,6 +289,7 @@ export default function FlightPlan() {
             {fixes.map((fix, i) => {
               const isActive = activeFix === i;
               const isPassed = activeFix !== null && i < activeFix;
+              const isReporting = isReportingFix(fix);
               const saved = waypointActuals[i];
               const hasSaved = saved && (saved.fob || saved.ato);
               const planFob = fixFob(fix, planTof);
@@ -294,11 +302,14 @@ export default function FlightPlan() {
                   ref={isActive ? activeRowRef : undefined}
                   onClick={() => selectFix(i)}
                   className={clsx(
-                    'border-t border-[#1a2030] cursor-pointer transition-colors',
+                    'border-t border-[#1a2030] transition-colors',
+                    isReporting ? 'cursor-pointer' : 'cursor-default',
                     isActive
                       ? 'bg-blue-600/15 hover:bg-blue-600/20'
                       : isPassed
                       ? hasSaved ? 'opacity-70 hover:opacity-90 bg-[var(--c-base)]' : 'opacity-40 hover:opacity-60 bg-[var(--c-base)]'
+                      : !isReporting
+                      ? 'opacity-30 bg-[var(--c-base)]'
                       : i % 2 === 0
                       ? 'bg-[var(--c-base)] hover:bg-[var(--c-surface)]'
                       : 'bg-[var(--c-depth)] hover:bg-[var(--c-surface)]'
