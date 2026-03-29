@@ -115,8 +115,8 @@ function UpdateSection() {
   );
 }
 
-function OpsMessageToggle({ msgKey, label, phase, enabled, onToggle }: {
-  msgKey: string; label: string; phase: string; enabled: boolean; onToggle: () => void;
+function OpsMessageToggle({ label, phase, enabled, onToggle }: {
+  label: string; phase: string; enabled: boolean; onToggle: () => void;
 }) {
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-[var(--c-border)] last:border-0">
@@ -147,7 +147,7 @@ function OpsMessagesSection() {
         <p className="text-xs text-gray-500 mb-4">Choose which automatic OPS messages are generated during each flight phase.</p>
         <div className="space-y-0">
           {regular.map(({ key, label, phase }) => (
-            <OpsMessageToggle key={key} msgKey={key} label={label} phase={phase}
+            <OpsMessageToggle key={key} label={label} phase={phase}
               enabled={enabledOpsMessages.includes(key)}
               onToggle={() => setOpsMessageEnabled(key, !enabledOpsMessages.includes(key))} />
           ))}
@@ -159,7 +159,7 @@ function OpsMessagesSection() {
         <p className="text-xs text-gray-500 mb-4">Conditional messages — only fire when specific criteria are met (route distance, time of day, turnaround time).</p>
         <div className="space-y-0">
           {special.map(({ key, label, phase }) => (
-            <OpsMessageToggle key={key} msgKey={key} label={label} phase={phase}
+            <OpsMessageToggle key={key} label={label} phase={phase}
               enabled={enabledOpsMessages.includes(key)}
               onToggle={() => setOpsMessageEnabled(key, !enabledOpsMessages.includes(key))} />
           ))}
