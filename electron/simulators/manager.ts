@@ -11,6 +11,12 @@ export function setupSimulatorManager(win: BrowserWindow) {
   // Track which sources are currently connected
   const connectedSources = new Set<'msfs' | 'p3d' | 'xplane'>();
 
+  // Current status — returned synchronously when renderer requests it on mount
+  let currentStatus: { connected: boolean; source: 'msfs' | 'p3d' | 'xplane' | null } = {
+    connected: false,
+    source: null,
+  };
+
   const onPosition: PositionCallback = (pos: SimPosition) => {
     if (!win.isDestroyed()) {
       win.webContents.send('sim:position', pos);
@@ -34,31 +40,20 @@ export function setupSimulatorManager(win: BrowserWindow) {
       ? [...connectedSources][connectedSources.size - 1]
       : null;
 
+    currentStatus = { connected: connectedSources.size > 0, source: activeSource };
+
     if (!win.isDestroyed()) {
-      win.webContents.send('sim:status', {
-        connected: connectedSources.size > 0,
-        source: activeSource,
-      });
+      win.webContents.send('sim:status', currentStatus);
     }
   };
 
-  const sendCurrentStatus = () => {
-    const activeSource = connectedSources.size > 0
-      ? [...connectedSources][connectedSources.size - 1]
-      : null;
-    if (!win.isDestroyed()) {
-      win.webContents.send('sim:status', {
-        connected: connectedSources.size > 0,
-        source: activeSource,
-      });
-    }
-  };
+  const getStatus = () => currentStatus;
 
   const stopSimConnect = startSimConnectConnector(onPosition, onStatus);
   const stopXPlane    = startXPlaneConnector(onPosition, onStatus);
 
   return {
     stop: () => { stopSimConnect(); stopXPlane(); },
-    sendCurrentStatus,
+    getStatus,
   };
 }

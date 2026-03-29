@@ -15,6 +15,12 @@ export function useSimPosition() {
       useEFBStore.getState().setSimStatus(connected, source);
     });
 
+    // Request current status immediately after registering the listener — handles
+    // the race where SimConnect connects before this useEffect runs.
+    window.electronAPI?.getSimStatus?.().then(({ connected, source }) => {
+      useEFBStore.getState().setSimStatus(connected, source);
+    });
+
     return () => {
       cleanPos?.();
       cleanStatus?.();

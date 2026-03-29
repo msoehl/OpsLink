@@ -179,9 +179,9 @@ app.whenReady().then(() => {
   const win = createWindow();
   setupUpdater(win);
   const simManager = setupSimulatorManager(win);
-  // Re-broadcast sim status after renderer finishes loading — handles the race
-  // where SimConnect connects before the renderer's IPC listener is registered.
-  win.webContents.on('did-finish-load', () => simManager.sendCurrentStatus());
+  // Renderer can request current sim status on mount (handles the race where
+  // SimConnect connects before the renderer's useEffect registers its listener).
+  ipcMain.handle('sim:get-status', () => simManager.getStatus());
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('sim:status', (_e, status) => cb(status));
     return () => ipcRenderer.removeAllListeners('sim:status');
   },
+  getSimStatus: () => ipcRenderer.invoke('sim:get-status'),
   appVersion:      () => ipcRenderer.invoke('app:version'),
   platform:        () => ipcRenderer.invoke('win:platform'),
   windowMinimize:  () => ipcRenderer.invoke('win:minimize'),

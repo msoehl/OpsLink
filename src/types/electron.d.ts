@@ -12,7 +12,8 @@ declare global {
       setUpdateChannel: (ch: string)   => Promise<void>;
       onUpdateStatus:  (cb: (payload: { status: string; info?: unknown }) => void) => () => void;
       onSimPosition:   (cb: (pos: SimPosition) => void) => () => void;
-      onSimStatus:       (cb: (status: { connected: boolean; source: 'msfs' | 'p3d' | 'xplane' | null }) => void) => () => void;
+      onSimStatus:     (cb: (status: { connected: boolean; source: 'msfs' | 'p3d' | 'xplane' | null }) => void) => () => void;
+      getSimStatus:    () => Promise<{ connected: boolean; source: 'msfs' | 'p3d' | 'xplane' | null }>;
       appVersion:        () => Promise<string>;
       platform:          () => Promise<string>;
       windowMinimize:    () => Promise<void>;
