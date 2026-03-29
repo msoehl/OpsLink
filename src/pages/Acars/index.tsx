@@ -1068,27 +1068,20 @@ export default function AcarsPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const isAtBottomRef = useRef<boolean>(true);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
+  function handleScrollMessages(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    setIsAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 50);
+  }
 
   useEffect(() => {
-    const el = messagesEndRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(([entry]) => {
-      isAtBottomRef.current = entry.isIntersecting;
-    }, { threshold: 0 });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (isAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (isAtBottom) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [acarsMessages]);
 
   useEffect(() => {
-    if (acarsUnread > 0 && isAtBottomRef.current) resetAcarsUnread();
-  }, [acarsUnread, resetAcarsUnread]);
+    if (acarsUnread > 0 && isAtBottom) resetAcarsUnread();
+  }, [acarsUnread, isAtBottom, resetAcarsUnread]);
 
   // Auto-switch to CPDLC mode when triggered from Map page
   useEffect(() => {
@@ -1211,7 +1204,7 @@ export default function AcarsPage() {
       )}
 
       {/* Message thread */}
-      <div className="flex-1 overflow-auto p-4 space-y-2 min-h-0">
+      <div className="flex-1 overflow-auto p-4 space-y-2 min-h-0" onScroll={handleScrollMessages}>
         {acarsMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-600 text-xs">
             No messages yet — polling every 30s
