@@ -16,8 +16,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/electron
+          key: electron-mac-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
         run: npm ci
+        env:
+          ELECTRON_GET_MAX_RETRIES: 5
 
       - name: Set dev version and publish config
         run: node -e "const fs=require('fs'),p=JSON.parse(fs.readFileSync('package.json')); const [maj,min]=p.version.split('.'); p.version=maj+'.'+(+min+1)+'.0-dev.'+process.env.BUILD; p.build.publish={provider:'generic',url:'https://github.com/msoehl/OpsLink/releases/download/dev-latest',channel:'dev'}; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
@@ -49,8 +57,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/electron/Cache
+          key: electron-win-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
         run: npm ci
+        env:
+          ELECTRON_GET_MAX_RETRIES: 5
 
       - name: Set dev version and publish config
         run: node -e "const fs=require('fs'),p=JSON.parse(fs.readFileSync('package.json')); const [maj,min]=p.version.split('.'); p.version=maj+'.'+(+min+1)+'.0-dev.'+process.env.BUILD; p.build.publish={provider:'generic',url:'https://github.com/msoehl/OpsLink/releases/download/dev-latest',channel:'dev'}; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
