@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useEFBStore } from '../store/efbStore';
 import { hoppiePoll, hoppiePing } from '../services/hoppie';
+import { playIncomingBeep, playCpdlcChime, playOpsBeep } from '../services/audio';
 
 const POLL_INTERVAL = 30_000;
 
@@ -27,10 +28,15 @@ export function useAcarsPolling() {
         const msgs = await hoppiePoll(s.hoppieLogon, cs);
         if (msgs.length > 0) {
           const fresh = useEFBStore.getState();
-          msgs.forEach(m => fresh.addAcarsMessage(m));
-          if (useEFBStore.getState().activePage !== 'acars') {
-            useEFBStore.getState().incrementAcarsUnread();
-          }
+          msgs.forEach(m => {
+            fresh.addAcarsMessage(m);
+            if (fresh.soundEnabled) {
+              if (m.type === 'cpdlc') playCpdlcChime();
+              else if (m.from?.endsWith('_ATIS') || m.from === 'OPSLINK') playOpsBeep();
+              else playIncomingBeep();
+            }
+          });
+          useEFBStore.getState().incrementAcarsUnread();
         }
         useEFBStore.getState().setHoppieError(null);
       } catch {

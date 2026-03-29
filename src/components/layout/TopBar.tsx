@@ -71,7 +71,7 @@ export default function TopBar() {
   }, []);
 
   const flightInfo = ofp
-    ? `${ofp.atc?.callsign || ''} · ${ofp.origin?.icao_code} → ${ofp.destination?.icao_code}`
+    ? `${ofp.atc?.callsign || ''} · ${ofp.origin?.icao_code ?? '?'} → ${ofp.destination?.icao_code ?? '?'}`
     : null;
 
   return (

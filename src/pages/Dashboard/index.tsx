@@ -376,7 +376,7 @@ export default function Dashboard() {
         <div className={clsx('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] border font-mono',
           simConnected ? 'border-blue-500/40 bg-blue-500/5 text-blue-400' : 'border-[var(--c-border)] text-gray-500')}>
           <MonitorCheck size={9} />
-          {simConnected ? `Sim: ${simSource?.toUpperCase() ?? 'OK'}` : 'Sim: —'}
+          {simConnected ? `Sim: ${{ msfs: 'MSFS', p3d: 'P3D', xplane: 'X-Plane' }[simSource!] ?? 'OK'}` : 'Sim: —'}
         </div>
         {ofpAgeHours > 2 && (
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] border border-amber-500/40 bg-amber-500/5 text-amber-400 font-mono">

@@ -12,14 +12,6 @@ export async function fetchOFP(username: string): Promise<SimbriefOFP> {
   return response.data;
 }
 
-export async function fetchOFPById(pilotId: string): Promise<SimbriefOFP> {
-  const url = `${SIMBRIEF_API_BASE}?userid=${encodeURIComponent(pilotId)}&json=1`;
-  const response = await axios.get<SimbriefOFP>(url);
-  if (response.data.fetch?.status === 'Error') {
-    throw new Error('No flight plan found for this Pilot ID.');
-  }
-  return response.data;
-}
 
 function isKgs(units: unknown): boolean {
   return typeof units !== 'string' || units !== 'lbs';

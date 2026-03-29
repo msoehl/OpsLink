@@ -102,25 +102,6 @@ export async function hoppieOnlineStations(prefix: string): Promise<string[]> {
   }
 }
 
-/** Returns all online station names that start with the given prefix. */
-export async function hoppieQueryStations(logon: string, from: string, prefix: string): Promise<string[]> {
-  try {
-    const url = buildUrl({ logon, from, to: 'SERVER', type: 'stations', packet: prefix });
-    const res = await fetch(url);
-    const text = await res.text();
-    if (!text.startsWith('ok')) return [];
-    const stations: string[] = [];
-    const re = /\{([^:}]+):/g;
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      stations.push(m[1]);
-    }
-    return stations.filter(s => s.toUpperCase().startsWith(prefix.toUpperCase()));
-  } catch {
-    return [];
-  }
-}
-
 function parseResponse(raw: string): HoppieMessage[] {
   if (!raw.startsWith('ok')) return [];
   const body = raw.slice(3).trim();

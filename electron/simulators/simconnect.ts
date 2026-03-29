@@ -30,6 +30,12 @@ export function startSimConnectConnector(
           SimConnectPeriod.SECOND,
         );
 
+        // For P3D: wait briefly so MSFS (KittyHawk) can connect first and take priority.
+        // MSFS accepts both protocols — without this delay the FSX_SP2 connection often
+        // wins the race and the UI briefly flashes "P3D" before switching to "MSFS".
+        if (source === 'p3d') await sleep(800);
+        if (stopped) break;
+
         onStatus(true, source);
 
         await new Promise<void>((resolve) => {

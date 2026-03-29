@@ -182,8 +182,8 @@ export const useEFBStore = create<EFBStore>()(
       setCpdlcStation: (station) => set({ cpdlcStation: station }),
       cpdlcMsgCounter: 1,
       nextCpdlcMsgId: () => {
-        let id = 0;
-        set(s => { id = s.cpdlcMsgCounter; return { cpdlcMsgCounter: s.cpdlcMsgCounter + 1 }; });
+        const id = get().cpdlcMsgCounter;
+        set({ cpdlcMsgCounter: id + 1 });
         return id;
       },
 

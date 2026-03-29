@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useEFBStore } from './store/efbStore';
 import { useAcarsPolling } from './hooks/useAcarsPolling';
 import { useSimPosition } from './hooks/useSimPosition';
-import { useFlightTracking } from './hooks/useFlightTracking';
+import { useOpsPhaseMessages } from './hooks/useOpsPhaseMessages';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
@@ -49,7 +49,7 @@ export default function App() {
 
   useAcarsPolling();
   useSimPosition();
-  useFlightTracking();
+  useOpsPhaseMessages();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);

@@ -55,7 +55,7 @@ function planeIcon(heading: number, isOwn: boolean, isSim = false) {
   const color = isSim ? '#f59e0b' : isOwn ? '#4ade80' : '#93c5fd';
   const size  = isSim ? 38 : isOwn ? 36 : 28;
   return L.divIcon({
-    html: `<div style="transform:rotate(${heading}deg);font-size:${size}px;line-height:1;color:${color};text-shadow:0 0 6px #000,0 0 3px #000;filter:drop-shadow(0 0 4px rgba(0,0,0,0.9))">✈</div>`,
+    html: `<div style="transform:rotate(${heading - 45}deg);font-size:${size}px;line-height:1;color:${color};text-shadow:0 0 6px #000,0 0 3px #000;filter:drop-shadow(0 0 4px rgba(0,0,0,0.9))">✈</div>`,
     className: '',
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
@@ -253,6 +253,13 @@ function AtcTooltipContent({ group }: { group: AtcGroup }) {
 
 export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, alternateLon, alternateIcao, traffic = [], simPosition, showTrail, controllers = [], sectorPolygons = [], routeKey, onMapReady }: Props) {
   const { theme, simTrail } = useEFBStore();
+  const simMarkerRef = useRef<L.Marker>(null);
+
+  useEffect(() => {
+    if (simMarkerRef.current && simPosition) {
+      simMarkerRef.current.setIcon(planeIcon(simPosition.headingTrue, false, true));
+    }
+  }, [simPosition?.headingTrue]);
   const positions: LatLngTuple[] = fixes
     .filter((f) => f.pos_lat !== '0.000000' && f.pos_long !== '0.000000')
     .map((f) => [parseFloat(f.pos_lat), parseFloat(f.pos_long)]);
@@ -456,6 +463,7 @@ export default function RouteMap({ fixes, originIcao, destIcao, alternateLat, al
       {/* Simulator own aircraft — shown in amber, always on top */}
       {simPosition && (
         <Marker
+          ref={simMarkerRef}
           position={[simPosition.lat, simPosition.lon]}
           icon={planeIcon(simPosition.headingTrue, false, true)}
           zIndexOffset={2000}

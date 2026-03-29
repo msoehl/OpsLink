@@ -352,7 +352,7 @@ export default function MapPage() {
             <div className="flex items-center gap-1.5 text-xs">
               <Joystick size={12} className={simConnected ? 'text-green-400' : 'text-gray-600'} />
               <span className={simConnected ? 'text-green-400' : 'text-gray-600'}>
-                {simSource?.toUpperCase() ?? 'SIM'}
+                {{ msfs: 'MSFS', p3d: 'P3D', xplane: 'X-Plane' }[simSource!] ?? 'SIM'}
                 {!simConnected && ' (last known)'}
               </span>
             </div>
