@@ -76,10 +76,10 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
-ipcMain.handle('win:minimize',    (_e, _a, win = BrowserWindow.getFocusedWindow()) => win?.minimize());
-ipcMain.handle('win:maximize',    (_e, _a, win = BrowserWindow.getFocusedWindow()) => win?.isMaximized() ? win.unmaximize() : win?.maximize());
-ipcMain.handle('win:close',       (_e, _a, win = BrowserWindow.getFocusedWindow()) => win?.close());
-ipcMain.handle('win:is-maximized',(_e, _a, win = BrowserWindow.getFocusedWindow()) => win?.isMaximized() ?? false);
+ipcMain.handle('win:minimize',    (e) => { BrowserWindow.fromWebContents(e.sender)?.minimize(); });
+ipcMain.handle('win:maximize',    (e) => { const w = BrowserWindow.fromWebContents(e.sender); w?.isMaximized() ? w.unmaximize() : w?.maximize(); });
+ipcMain.handle('win:close',       (e) => { BrowserWindow.fromWebContents(e.sender)?.close(); });
+ipcMain.handle('win:is-maximized',(e) => BrowserWindow.fromWebContents(e.sender)?.isMaximized() ?? false);
 ipcMain.handle('win:platform',    () => process.platform);
 ipcMain.handle('app:version',     () => app.getVersion());
 

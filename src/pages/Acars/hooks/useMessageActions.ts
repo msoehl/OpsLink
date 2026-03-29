@@ -31,10 +31,21 @@ export interface InlineReply {
   eta: string;
 }
 
+// Realistic airline pool for CONNEX schedule (excludes own carrier at runtime)
+const CONNEX_AIRLINES = [
+  // European network carriers
+  'DLH', 'BAW', 'AFR', 'KLM', 'IBE', 'AUA', 'SWR', 'THY', 'SAS', 'FIN',
+  'TAP', 'LOT', 'CSA', 'AZA', 'VLG', 'BEL', 'EIN', 'TRA',
+  // Long-haul feeders
+  'UAE', 'QTR', 'SIA', 'ETD', 'ELY', 'MSR', 'DAL', 'UAL', 'AAL', 'ACA',
+  // Asian carriers
+  'ANA', 'JAL', 'KAL', 'CPA', 'MAS', 'THA',
+];
+
 export interface UseMessageActionsReturn {
   sendMsg: (to: string, type: string, packet: string) => Promise<void>;
   injectOps: (packet: string) => void;
-  replyToMsg: (idx: number, to: string, packet: string) => void;
+  replyToMsg: (idx: number, to: string, packet: string, feedback?: string) => void;
   poll: () => Promise<void>;
   testAllPhaseMessages: () => void;
   respondedIdx: Set<number>;
@@ -52,8 +63,6 @@ export function useMessageActions(): UseMessageActionsReturn {
   const [inlineReply, setInlineReply] = useState<InlineReply | null>(null);
 
   const autoAtisRef = useRef<Set<string>>(new Set());
-  const phaseRef = useRef<string>('preflight');
-  const firedRef = useRef<Set<string>>(new Set());
   const opsCallsign = useRef<string>('OPSLINKOPS');
 
   async function sendMsg(to: string, type: string, packet: string) {
@@ -72,10 +81,14 @@ export function useMessageActions(): UseMessageActionsReturn {
     }
   }
 
-  function replyToMsg(idx: number, to: string, packet: string) {
+  function replyToMsg(idx: number, to: string, packet: string, feedback?: string) {
     sendMsg(to, 'telex', packet).catch(() => {});
     setRespondedIdx(prev => new Set(prev).add(idx));
     setInlineReply(null);
+    if (feedback) {
+      const delay = 2500 + Math.random() * 2500;
+      setTimeout(() => injectOps(feedback), delay);
+    }
   }
 
   async function poll() {
@@ -172,12 +185,12 @@ export function useMessageActions(): UseMessageActionsReturn {
     } else if (altFt >= 10000 && Math.abs(verticalSpeedFpm) <= 300 && groundspeedKts > 150) {
       phase = 'cruise';
     } else {
-      phase = phaseRef.current;
+      phase = s.acarsPhase;
     }
 
-    const prev = phaseRef.current;
+    const prev = s.acarsPhase;
     if (phase === prev) return;
-    phaseRef.current = phase;
+    s.setAcarsPhase(phase);
 
     // Update logbook phase history
     const currentActiveLogbookEntryId = s.activeLogbookEntryId;
@@ -205,8 +218,10 @@ export function useMessageActions(): UseMessageActionsReturn {
     const acr = currentOfp.aircraft.reg ?? acType;
 
     const fire = (key: string, msg: string) => {
-      if (firedRef.current.has(key)) return;
-      firedRef.current.add(key);
+      const st = useEFBStore.getState();
+      if (st.acarsPhasesFired.includes(key)) return;
+      st.markAcarsPhaseAsFired(key);
+      if (!st.enabledOpsMessages.includes(key)) return;
       injectOps(msg);
     };
 
@@ -221,32 +236,107 @@ export function useMessageActions(): UseMessageActionsReturn {
         `EST ZFW           ${currentOfp.weights.est_zfw ?? '—'} ${u}`,
         `EST TOW           ${currentOfp.weights.est_tow ?? '—'} ${u}`,
         `RAMP FUEL         ${currentOfp.fuel.plan_ramp ?? '—'} ${u}`,
-        'LOADSHEET SIGNED — READY FOR BOARDING',
+        'LOADSHEET PENDING — REVIEW AND SIGN',
+        'REPLY ACPT',
       ].join('\n'));
+
+      const paxPre = currentOfp.weights.pax_count ?? '—';
+      fire('meals_reminder', [
+        'CATERING / CREW MEALS',
+        `FLIGHT ${cs}  ${dep}-${dst}`,
+        `TOTAL PAX    ${paxPre}`,
+        'CATERING LOADED FOR DEPARTURE',
+        'PLEASE CONFIRM CATERING UPLIFT',
+        'ADVISE ANY SPECIAL MEAL CHANGES',
+      ].join('\n'));
+
+      // Special event: short turnaround (prev on-block < 45 min ago)
+      const today = new Date().toISOString().slice(0, 10);
+      const recentEntry = [...s.logbookEntries]
+        .filter(e => e.date === today && e.onBlockUtc && e.id !== s.activeLogbookEntryId)
+        .sort((a, b) => a.onBlockUtc.localeCompare(b.onBlockUtc))
+        .pop();
+      if (recentEntry) {
+        const [hh, mm] = recentEntry.onBlockUtc.replace('Z', '').split(':').map(Number);
+        const blockInDate = new Date();
+        blockInDate.setUTCHours(hh, mm, 0, 0);
+        const diffMin = (Date.now() - blockInDate.getTime()) / 60000;
+        if (diffMin >= 0 && diffMin < 45) {
+          fire('short_turnaround', [
+            'SHORT TURNAROUND ALERT',
+            `FLIGHT ${cs}  ${dep}-${dst}`,
+            `PREV BLOCK IN  ${recentEntry.onBlockUtc}`,
+            `TURNAROUND TIME  ${Math.round(diffMin)} MIN`,
+            'CONFIRM AIRCRAFT SERVICED AND READY',
+            'ADVISE OPS OF ANY OUTSTANDING ITEMS',
+            'ACKNOWLEDGE WHEN READY',
+          ].join('\n'));
+        }
+      }
+
+      // Special event: long haul (great-circle > 2000 NM)
+      const routeDistNm = nmBetween(depLat, depLon, destLat, destLon);
+      if (routeDistNm > 2000) {
+        const enrouteSec = parseInt(currentOfp.times.est_time_enroute || '0');
+        const flightH = Math.floor(enrouteSec / 3600);
+        const flightM = Math.round((enrouteSec % 3600) / 60);
+        fire('long_haul', [
+          'LONG HAUL OPERATIONS BRIEF',
+          `FLIGHT ${cs}  ${dep}-${dst}`,
+          `EST FLIGHT TIME  ${flightH}H ${String(flightM).padStart(2, '0')}M`,
+          `ROUTE DISTANCE   ${Math.round(routeDistNm)} NM`,
+          'CONFIRM CREW REST SCHEDULE AGREED',
+          'ADVISE OPS OF ANY REST DISRUPTION',
+          'ACKNOWLEDGE WHEN READY',
+        ].join('\n'));
+      }
     }
 
     if (phase === 'taxi_out') {
       fire('taxi_out', [
-        'DEPARTURE INFORMATION',
+        'DEPARTURE CONFIRMATION',
         `FLIGHT ${cs}  ${dep}-${dst}`,
         `AIRCRAFT ${acr}  ${acType}`,
         'SLOT/CTOT AS FILED',
-        'PRE-DEPARTURE CLEARANCE AVAILABLE ON REQUEST',
+        'OPS MONITORING — CONTACT FOR UPDATES',
         'HAVE A SAFE DEPARTURE',
       ].join('\n'));
+
+      // Special event: night departure (22:00–05:59 UTC)
+      const utcHour = new Date().getUTCHours();
+      if (utcHour >= 22 || utcHour < 6) {
+        fire('night_departure', [
+          'NIGHT DEPARTURE CHECK',
+          `FLIGHT ${cs}  ${dep}-${dst}`,
+          `DEP TIME  ${utcNow()} UTC`,
+          'CONFIRM EXTERIOR LIGHTING OPERATIONAL',
+          'CONFIRM CREW REST COMPLIANT',
+          'HAVE A SAFE NIGHT DEPARTURE',
+          'ACKNOWLEDGE WHEN READY',
+        ].join('\n'));
+      }
     }
 
     if (phase === 'climb') {
+      const enrouteMin = Math.round(parseInt(currentOfp.times.est_time_enroute || '7200') / 60);
       fire('airborne', [
         'AIRBORNE NOTIFICATION',
         `FLIGHT ${cs}  ${dep}-${dst}`,
         `AIRBORNE TIME  ${utcNow()}`,
-        `ETA ${dst}  ${utcPlus(parseInt(currentOfp.times.est_time_enroute || '7200') / 60 - (Date.now() / 60000 % 10))}`,
+        `ETA ${dst}       ${utcPlus(enrouteMin)}`,
         'REPORT WHEN LEVEL',
       ].join('\n'));
     }
 
     if (phase === 'cruise') {
+      fire('top_of_climb', [
+        'CRUISE LEVEL REACHED',
+        `FLIGHT ${cs}  ${dep}-${dst}`,
+        `CRUISE FL${Math.round(altFt / 100)}`,
+        'MAINTAIN PLANNED CRUISE PROFILE',
+        'CRUISE REPORT WILL FOLLOW',
+      ].join('\n'));
+
       fire('cruise_check', [
         'CRUISE CHECK REQUEST',
         `FLIGHT ${cs}  ${dep}-${dst}`,
@@ -261,17 +351,22 @@ export function useMessageActions(): UseMessageActionsReturn {
       const totalPax = Math.floor(Math.random() * 25 + 3);
       const pax1 = Math.floor(totalPax * 0.55);
       const pax2 = totalPax - pax1;
-      const airline = cs.replace(/\d.*$/, '');
+      const ownAirline = cs.replace(/\d.*$/, '').toUpperCase();
+      const connexPool = CONNEX_AIRLINES.filter(a => a !== ownAirline);
+      const [al1, al2, al3] = [...connexPool].sort(() => Math.random() - 0.5);
+      const pax3 = pax2 > 5 ? Math.floor(pax2 * 0.4) : 0;
+      const pax2final = pax3 > 0 ? pax2 - pax3 : pax2;
       fire('connex', [
         'CONNEX SCHEDULE',
         `FLIGHT ${cs}  ${dep}-${dst}`,
-        `TOTAL CONNEX PAX  ${totalPax}`,
+        `TOTAL CONNEX PAX  ${totalPax + pax3}`,
         '',
-        `FROM ${airline}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin - 8)}   ${pax1} PAX`,
-        `FROM ${airline}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin + 12)}  ${pax2} PAX`,
+        `FROM ${al1}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin - 10)}   ${pax1} PAX`,
+        `FROM ${al2}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin - 3)}    ${pax2final} PAX`,
+        ...(pax3 > 0 ? [`FROM ${al3}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin + 15)}   ${pax3} PAX`] : []),
         '',
         'MIN CONNECT TIME  45 MIN',
-        ...(pax2 > 8 ? ['NOTE PRIORITY OFFLOAD RECOMMENDED'] : []),
+        ...(pax3 > 0 ? ['NOTE PRIORITY OFFLOAD RECOMMENDED'] : []),
       ].join('\n'));
     }
 
@@ -279,9 +374,9 @@ export function useMessageActions(): UseMessageActionsReturn {
       fire('descent_wx', [
         'DESTINATION WEATHER ADVISORY',
         `FLIGHT ${cs}  APPROACHING ${dst}`,
-        'CURRENT CONDITIONS ON REQUEST',
-        'RECOMMEND REQUEST D-ATIS VIA ACARS',
-        'EXPECT ILS APPROACH',
+        `DISTANCE TO ${dst}  ${Math.round(distToDest)} NM`,
+        'AUTO D-ATIS WILL FOLLOW AT 200 NM',
+        'ADVISE OPS OF ANY ROUTE DEVIATIONS',
         'HAVE A SAFE DESCENT',
       ].join('\n'));
     }
@@ -296,6 +391,7 @@ export function useMessageActions(): UseMessageActionsReturn {
         `ETA             ${utcPlus(Math.round(distToDest / (groundspeedKts || 250) * 60))}`,
         'HANDLING TEAM NOTIFIED',
         'WELCOME TO ' + dst,
+        'ACKNOWLEDGE WHEN READY',
       ].join('\n'));
     }
 
@@ -327,17 +423,8 @@ export function useMessageActions(): UseMessageActionsReturn {
         '',
         '── UPLIFT REQUEST ────────────────',
         `TARGET RAMP FUEL   ${planRamp} ${u}`,
-        'PLEASE ARRANGE FUEL UPLIFT',
+        'FUEL UPLIFT BEING ARRANGED',
         'CONFIRM ACTUAL FOB AND DEFECTS',
-      ].join('\n'));
-
-      const pax = currentOfp.weights.pax_count ?? '—';
-      fire('meals_reminder', [
-        'CATERING / CREW MEALS',
-        `FLIGHT ${cs}  ${dep}-${dst}`,
-        `TOTAL PAX    ${pax}`,
-        'PLEASE CONFIRM CATERING UPLIFT',
-        'ADVISE ANY SPECIAL MEAL CHANGES',
       ].join('\n'));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -347,7 +434,7 @@ export function useMessageActions(): UseMessageActionsReturn {
     const s = useEFBStore.getState();
     const currentOfp = s.ofp;
     if (!currentOfp) return;
-    firedRef.current.clear();
+    s.resetAcarsPhaseTracking();
     const cs = currentOfp.atc.callsign;
     const dep = currentOfp.origin.icao_code;
     const dst = currentOfp.destination.icao_code;
@@ -355,29 +442,64 @@ export function useMessageActions(): UseMessageActionsReturn {
     const acType = currentOfp.aircraft.icaocode;
     const acr = currentOfp.aircraft.reg ?? acType;
     const etaMin = 90;
+    const ownAirline = cs.replace(/\d.*$/, '').toUpperCase();
+    const pool = CONNEX_AIRLINES.filter(a => a !== ownAirline);
+    const [al1, al2, al3] = [...pool].sort(() => Math.random() - 0.5);
     const messages: string[] = [
+      // Preflight
       ['PAX / LOAD BRIEF', `FLIGHT ${cs}  ${dep}-${dst}`, `AIRCRAFT ${acr}  ${acType}`,
-        `PAX               ${currentOfp.weights.pax_count ?? '—'}`, `BAGS              ${currentOfp.weights.bag_count ?? '—'}`,
-        `PAYLOAD           ${currentOfp.weights.payload ?? '—'} ${u}`, `EST ZFW           ${currentOfp.weights.est_zfw ?? '—'} ${u}`,
-        `EST TOW           ${currentOfp.weights.est_tow ?? '—'} ${u}`, `RAMP FUEL         ${currentOfp.fuel.plan_ramp ?? '—'} ${u}`,
-        'LOADSHEET SIGNED — READY FOR BOARDING'].join('\n'),
-      ['DEPARTURE INFORMATION', `FLIGHT ${cs}  ${dep}-${dst}`, `AIRCRAFT ${acr}  ${acType}`,
-        'SLOT/CTOT AS FILED', 'PRE-DEPARTURE CLEARANCE AVAILABLE ON REQUEST', 'HAVE A SAFE DEPARTURE'].join('\n'),
+        `PAX               ${currentOfp.weights.pax_count ?? '—'}`,
+        `BAGS              ${currentOfp.weights.bag_count ?? '—'}`,
+        `PAYLOAD           ${currentOfp.weights.payload ?? '—'} ${u}`,
+        `EST ZFW           ${currentOfp.weights.est_zfw ?? '—'} ${u}`,
+        `EST TOW           ${currentOfp.weights.est_tow ?? '—'} ${u}`,
+        `RAMP FUEL         ${currentOfp.fuel.plan_ramp ?? '—'} ${u}`,
+        'LOADSHEET PENDING — REVIEW AND SIGN', 'REPLY ACPT'].join('\n'),
+      ['CATERING / CREW MEALS', `FLIGHT ${cs}  ${dep}-${dst}`,
+        `TOTAL PAX    ${currentOfp.weights.pax_count ?? '—'}`,
+        'CATERING LOADED FOR DEPARTURE',
+        'PLEASE CONFIRM CATERING UPLIFT', 'ADVISE ANY SPECIAL MEAL CHANGES'].join('\n'),
+      // Special events (shown in test regardless of conditions)
+      ['LONG HAUL OPERATIONS BRIEF', `FLIGHT ${cs}  ${dep}-${dst}`,
+        'EST FLIGHT TIME  12H 30M', 'ROUTE DISTANCE   6500 NM',
+        'CONFIRM CREW REST SCHEDULE AGREED', 'ADVISE OPS OF ANY REST DISRUPTION',
+        'ACKNOWLEDGE WHEN READY'].join('\n'),
+      ['SHORT TURNAROUND ALERT', `FLIGHT ${cs}  ${dep}-${dst}`,
+        'PREV BLOCK IN  13:45Z', 'TURNAROUND TIME  28 MIN',
+        'CONFIRM AIRCRAFT SERVICED AND READY', 'ADVISE OPS OF ANY OUTSTANDING ITEMS',
+        'ACKNOWLEDGE WHEN READY'].join('\n'),
+      // Taxi out
+      ['DEPARTURE CONFIRMATION', `FLIGHT ${cs}  ${dep}-${dst}`, `AIRCRAFT ${acr}  ${acType}`,
+        'SLOT/CTOT AS FILED', 'OPS MONITORING — CONTACT FOR UPDATES', 'HAVE A SAFE DEPARTURE'].join('\n'),
+      ['NIGHT DEPARTURE CHECK', `FLIGHT ${cs}  ${dep}-${dst}`,
+        `DEP TIME  ${utcNow()} UTC`, 'CONFIRM EXTERIOR LIGHTING OPERATIONAL',
+        'CONFIRM CREW REST COMPLIANT', 'HAVE A SAFE NIGHT DEPARTURE', 'ACKNOWLEDGE WHEN READY'].join('\n'),
+      // Climb
       ['AIRBORNE NOTIFICATION', `FLIGHT ${cs}  ${dep}-${dst}`,
-        `AIRBORNE TIME  ${utcNow()}`, `ETA ${dst}  ${utcPlus(etaMin)}`, 'REPORT WHEN LEVEL'].join('\n'),
+        `AIRBORNE TIME  ${utcNow()}`, `ETA ${dst}       ${utcPlus(etaMin)}`, 'REPORT WHEN LEVEL'].join('\n'),
+      // Cruise
+      ['CRUISE LEVEL REACHED', `FLIGHT ${cs}  ${dep}-${dst}`,
+        'CRUISE FL370', 'MAINTAIN PLANNED CRUISE PROFILE', 'CRUISE REPORT WILL FOLLOW'].join('\n'),
       ['CRUISE CHECK REQUEST', `FLIGHT ${cs}  ${dep}-${dst}`, 'PLEASE REPORT:',
         `  FOB (${u})`, '  CURRENT LEVEL', `  ETA ${dst}`, 'THANK YOU'].join('\n'),
-      ['CONNEX SCHEDULE', `FLIGHT ${cs}  ${dep}-${dst}`, 'TOTAL CONNEX PAX  18', '',
-        `FROM ${cs.replace(/\d.*$/, '')}456  ARR ${utcPlus(etaMin - 8)}   10 PAX`,
-        `FROM ${cs.replace(/\d.*$/, '')}789  ARR ${utcPlus(etaMin + 12)}   8 PAX`, '',
+      ['CONNEX SCHEDULE', `FLIGHT ${cs}  ${dep}-${dst}`, 'TOTAL CONNEX PAX  21', '',
+        `FROM ${al1}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin - 10)}   10 PAX`,
+        `FROM ${al2}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin - 3)}    7 PAX`,
+        `FROM ${al3}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin + 15)}   4 PAX`, '',
         'MIN CONNECT TIME  45 MIN', 'NOTE PRIORITY OFFLOAD RECOMMENDED'].join('\n'),
+      // Descent
       ['DESTINATION WEATHER ADVISORY', `FLIGHT ${cs}  APPROACHING ${dst}`,
-        'CURRENT CONDITIONS ON REQUEST', 'RECOMMEND REQUEST D-ATIS VIA ACARS',
-        'EXPECT ILS APPROACH', 'HAVE A SAFE DESCENT'].join('\n'),
+        `DISTANCE TO ${dst}  80 NM`,
+        'AUTO D-ATIS WILL FOLLOW AT 200 NM',
+        'ADVISE OPS OF ANY ROUTE DEVIATIONS', 'HAVE A SAFE DESCENT'].join('\n'),
+      // Approach
       ['GATE ASSIGNMENT', `FLIGHT ${cs}  ${dep}-${dst}`,
-        'ARR GATE/STAND  B14', `ETA             ${utcPlus(20)}`, 'HANDLING TEAM NOTIFIED', `WELCOME TO ${dst}`].join('\n'),
+        'ARR GATE/STAND  B14', `ETA             ${utcPlus(20)}`,
+        'HANDLING TEAM NOTIFIED', `WELCOME TO ${dst}`, 'ACKNOWLEDGE WHEN READY'].join('\n'),
+      // Taxi in
       ['LANDING ACKNOWLEDGEMENT', `FLIGHT ${cs}  LANDED ${dst}`,
         `LANDING TIME  ${utcNow()}`, 'PLEASE REPORT BLOCK IN TIME', 'GROUND HANDLING STANDING BY'].join('\n'),
+      // On block
       ['BLOCK IN / FUEL UPLIFT REQUEST', `FLIGHT ${cs}  ${dep}-${dst}`,
         `BLOCK IN TIME      ${utcNow()}`, '',
         '── FUEL SUMMARY ──────────────────',
@@ -387,10 +509,7 @@ export function useMessageActions(): UseMessageActionsReturn {
         `TAXI BURN          ${currentOfp.fuel.taxi ?? '—'} ${u}`, '',
         '── UPLIFT REQUEST ────────────────',
         `TARGET RAMP FUEL   ${currentOfp.fuel.plan_ramp ?? '—'} ${u}`,
-        'PLEASE ARRANGE FUEL UPLIFT', 'CONFIRM ACTUAL FOB AND DEFECTS'].join('\n'),
-      ['CATERING / CREW MEALS', `FLIGHT ${cs}  ${dep}-${dst}`,
-        `TOTAL PAX    ${currentOfp.weights.pax_count ?? '—'}`,
-        'PLEASE CONFIRM CATERING UPLIFT', 'ADVISE ANY SPECIAL MEAL CHANGES'].join('\n'),
+        'FUEL UPLIFT BEING ARRANGED', 'CONFIRM ACTUAL FOB AND DEFECTS'].join('\n'),
     ];
     messages.forEach((pkt, i) => setTimeout(() => injectOps(pkt), i * 400));
   }

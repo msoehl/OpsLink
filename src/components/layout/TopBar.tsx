@@ -30,7 +30,7 @@ function WindowControls({ isMaximized }: { isMaximized: boolean }) {
   const api = window.electronAPI;
   if (!api) return null;
   return (
-    <div className="flex items-stretch h-full ml-2 -mr-4">
+    <div className="flex items-stretch h-full ml-2">
       <button
         onClick={() => api.windowMinimize()}
         className="w-11 flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10 transition-colors"

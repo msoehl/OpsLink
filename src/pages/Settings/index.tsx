@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useEFBStore } from '../../store/efbStore';
+import { useEFBStore, OPS_MESSAGES } from '../../store/efbStore';
 import { fetchOFP } from '../../services/simbrief/api';
 import { Loader2, CheckCircle, AlertCircle, Settings, RefreshCw, Zap } from 'lucide-react';
 
@@ -111,6 +111,60 @@ function UpdateSection() {
       {lastCheckedLabel && (
         <p className="text-xs text-gray-600 mt-3">{lastCheckedLabel}</p>
       )}
+    </div>
+  );
+}
+
+function OpsMessageToggle({ msgKey, label, phase, enabled, onToggle }: {
+  msgKey: string; label: string; phase: string; enabled: boolean; onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-[var(--c-border)] last:border-0">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-xs text-white truncate">{label}</span>
+        <span className="text-[10px] text-gray-500 bg-[var(--c-depth)] border border-[var(--c-border)] px-1.5 py-0.5 rounded shrink-0">{phase}</span>
+      </div>
+      <button
+        onClick={onToggle}
+        className={`relative w-8 h-[18px] rounded-full transition-colors shrink-0 ml-3 ${enabled ? 'bg-blue-600' : 'bg-[var(--c-border2)]'}`}
+        title={enabled ? 'Disable' : 'Enable'}
+      >
+        <span className={`absolute top-[3px] w-3 h-3 rounded-full bg-white transition-transform ${enabled ? 'translate-x-[17px]' : 'translate-x-[3px]'}`} />
+      </button>
+    </div>
+  );
+}
+
+function OpsMessagesSection() {
+  const { enabledOpsMessages, setOpsMessageEnabled } = useEFBStore();
+  const regular = OPS_MESSAGES.filter(m => !m.special);
+  const special = OPS_MESSAGES.filter(m => m.special);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
+        <h3 className="text-sm font-semibold text-white mb-1">OPS Auto-Messages</h3>
+        <p className="text-xs text-gray-500 mb-4">Choose which automatic OPS messages are generated during each flight phase.</p>
+        <div className="space-y-0">
+          {regular.map(({ key, label, phase }) => (
+            <OpsMessageToggle key={key} msgKey={key} label={label} phase={phase}
+              enabled={enabledOpsMessages.includes(key)}
+              onToggle={() => setOpsMessageEnabled(key, !enabledOpsMessages.includes(key))} />
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
+        <h3 className="text-sm font-semibold text-white mb-1">Special Events</h3>
+        <p className="text-xs text-gray-500 mb-4">Conditional messages — only fire when specific criteria are met (route distance, time of day, turnaround time).</p>
+        <div className="space-y-0">
+          {special.map(({ key, label, phase }) => (
+            <OpsMessageToggle key={key} msgKey={key} label={label} phase={phase}
+              enabled={enabledOpsMessages.includes(key)}
+              onToggle={() => setOpsMessageEnabled(key, !enabledOpsMessages.includes(key))} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -242,6 +296,9 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
+
+        {/* OPS Auto-Messages */}
+        <OpsMessagesSection />
 
         {/* Updates */}
         <UpdateSection />

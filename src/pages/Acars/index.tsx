@@ -1270,11 +1270,15 @@ export default function AcarsPage() {
               {/* Loadsheet ACPT/REJECT */}
               {!msg.isSent && msg.packet.includes('REPLY ACPT') && !respondedIdx.has(i) && (
                 <div className="flex gap-1.5 mt-2">
-                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `ACPT\nFLIGHT ${callsign}\nLOADSHEET ACKNOWLEDGED ${utcNow()}`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
+                    `ACPT\nFLIGHT ${callsign}\nLOADSHEET ACKNOWLEDGED ${utcNow()}`,
+                    `LOADSHEET ACKNOWLEDGED\nFLIGHT ${callsign}\nBOARDING COMPLETE — HAVE A SAFE FLIGHT`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
                     ✓ ACPT
                   </button>
-                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `REJECT\nFLIGHT ${callsign}\nLOADSHEET REJECTED — PLEASE REVISE`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
+                    `REJECT\nFLIGHT ${callsign}\nLOADSHEET REJECTED — PLEASE REVISE`,
+                    `LOADSHEET REJECTED\nFLIGHT ${callsign}\nREVISED LOADSHEET WILL FOLLOW — STAND BY`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors">
                     ✗ REJECT
                   </button>
@@ -1283,11 +1287,15 @@ export default function AcarsPage() {
               {/* REPORT WHEN LEVEL */}
               {!msg.isSent && msg.packet.includes('REPORT WHEN LEVEL') && !respondedIdx.has(i) && (
                 <div className="flex gap-1.5 mt-2">
-                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `WILCO\nFLIGHT ${callsign}\nWILL REPORT WHEN LEVEL`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
+                    `WILCO\nFLIGHT ${callsign}\nWILL REPORT WHEN LEVEL`,
+                    `WILCO ACKNOWLEDGED\nFLIGHT ${callsign}\nCRUISE REPORT REQUESTED WHEN LEVEL`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
                     ✓ WILCO
                   </button>
-                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `UNABLE\nFLIGHT ${callsign}`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
+                    `UNABLE\nFLIGHT ${callsign}`,
+                    `UNABLE NOTED\nFLIGHT ${callsign}\nADVISE OPS WHEN POSSIBLE`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors">
                     ✗ UNABLE
                   </button>
@@ -1311,7 +1319,8 @@ export default function AcarsPage() {
                     <div className="flex gap-1.5">
                       <button
                         onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
-                          `CRUISE REPORT\nFLIGHT ${callsign}\nFOB         ${inlineReply.fob || '—'} ${fuelUnits}\nCURRENT FL  ${inlineReply.fl || '—'}\nETA         ${inlineReply.eta || '—'}`)}
+                          `CRUISE REPORT\nFLIGHT ${callsign}\nFOB         ${inlineReply.fob || '—'} ${fuelUnits}\nCURRENT FL  ${inlineReply.fl || '—'}\nETA         ${inlineReply.eta || '—'}`,
+                          `CRUISE REPORT RECEIVED\nFLIGHT ${callsign}\nCONTINUE AS PLANNED — NEXT CHECK ON DESCENT`)}
                         className="px-3 py-1 rounded text-[10px] font-mono border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 transition-colors">
                         ▲ SEND REPORT
                       </button>
@@ -1330,7 +1339,9 @@ export default function AcarsPage() {
               )}
               {/* BLOCK IN */}
               {!msg.isSent && msg.packet.includes('PLEASE REPORT BLOCK IN TIME') && !respondedIdx.has(i) && (
-                <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `BLOCK IN\nFLIGHT ${callsign}\nBLOCK IN TIME  ${utcNow()}`)}
+                <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
+                  `BLOCK IN\nFLIGHT ${callsign}\nBLOCK IN TIME  ${utcNow()}`,
+                  `BLOCK IN CONFIRMED\nFLIGHT ${callsign}\nGROUND HANDLING PROCEEDING — THANK YOU`)}
                   className="mt-2 px-3 py-1 rounded text-[10px] font-mono border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 transition-colors">
                   ⏱ BLOCK IN NOW
                 </button>
@@ -1338,11 +1349,15 @@ export default function AcarsPage() {
               {/* Fuel uplift confirm */}
               {!msg.isSent && msg.packet.includes('CONFIRM ACTUAL FOB AND DEFECTS') && !respondedIdx.has(i) && (
                 <div className="flex gap-1.5 mt-2">
-                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `CONFIRMED\nFLIGHT ${callsign}\nFOB AS PLANNED — NO DEFECTS`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
+                    `CONFIRMED\nFLIGHT ${callsign}\nFOB AS PLANNED — NO DEFECTS`,
+                    `FOB AND DEFECTS NOTED\nFLIGHT ${callsign}\nFUEL UPLIFT ARRANGED — THANK YOU`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
                     ✓ CONFIRM
                   </button>
-                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `DEFECTS NOTED\nFLIGHT ${callsign}\nDEFECTS TO FOLLOW — STAND BY`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
+                    `DEFECTS NOTED\nFLIGHT ${callsign}\nDEFECTS TO FOLLOW — STAND BY`,
+                    `TECHNICAL ISSUE NOTED\nFLIGHT ${callsign}\nMAINTENANCE TEAM INFORMED — STAND BY`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 transition-colors">
                     ⚠ ADVISE DEFECTS
                   </button>
@@ -1351,19 +1366,24 @@ export default function AcarsPage() {
               {/* Catering confirm */}
               {!msg.isSent && msg.packet.includes('PLEASE CONFIRM CATERING UPLIFT') && !respondedIdx.has(i) && (
                 <div className="flex gap-1.5 mt-2">
-                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `CONFIRMED\nFLIGHT ${callsign}\nCATERING UPLIFT CONFIRMED`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
+                    `CONFIRMED\nFLIGHT ${callsign}\nCATERING UPLIFT CONFIRMED`,
+                    `CATERING CONFIRMED\nFLIGHT ${callsign}\nCREW MEALS READY — HAVE A GREAT FLIGHT`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
                     ✓ CONFIRMED
                   </button>
-                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `UNABLE\nFLIGHT ${callsign}\nCATERING ISSUE — PLEASE ADVISE`)}
+                  <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
+                    `UNABLE\nFLIGHT ${callsign}\nCATERING ISSUE — PLEASE ADVISE`,
+                    `CATERING ISSUE ACKNOWLEDGED\nFLIGHT ${callsign}\nGROUND SUPERVISOR INFORMED — STANDBY FOR UPDATE`)}
                     className="px-3 py-1 rounded text-[10px] font-mono border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors">
                     ✗ UNABLE
                   </button>
                 </div>
               )}
-              {/* Gate/slot acknowledge */}
+              {/* Acknowledge (gate assignment, long haul briefing, short turnaround, night departure) */}
               {!msg.isSent && msg.packet.includes('ACKNOWLEDGE WHEN READY') && !respondedIdx.has(i) && (
-                <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS', `ACKNOWLEDGED\nFLIGHT ${callsign}\nGATE INFO RECEIVED ${utcNow()}`)}
+                <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINKOPS',
+                  `ACKNOWLEDGED\nFLIGHT ${callsign}\n${utcNow()}`)}
                   className="mt-2 px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
                   ✓ ACKNOWLEDGED
                 </button>
