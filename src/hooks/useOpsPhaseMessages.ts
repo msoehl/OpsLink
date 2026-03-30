@@ -43,6 +43,10 @@ export const CONNEX_AIRLINES = [
 export function useOpsPhaseMessages() {
   const { simPosition } = useEFBStore();
   const autoAtisRef = useRef<Set<string>>(new Set());
+  // Debounce phase transitions: a new phase must be stable for 3 s before
+  // committing. This filters out single-frame SimConnect noise on (re)connect,
+  // which would otherwise fire messages from a fresh/empty acarsPhasesFired.
+  const pendingPhaseRef = useRef<{ phase: string; since: number } | null>(null);
 
   // ── Auto D-ATIS when < 200 NM from destination ────────────────────────────
   useEffect(() => {
@@ -105,14 +109,29 @@ export function useOpsPhaseMessages() {
       phase = 'descent';
     } else if (altFt >= 800 && distToDest <= 80) {
       phase = 'approach';
-    } else if (altFt >= 10000 && Math.abs(verticalSpeedFpm) <= 300 && groundspeedKts > 150) {
+    } else if (altFt >= 3000 && Math.abs(verticalSpeedFpm) <= 300 && groundspeedKts > 100) {
       phase = 'cruise';
     } else {
       phase = s.acarsPhase;
     }
 
     const prev = s.acarsPhase;
-    if (phase === prev) return;
+    if (phase === prev) {
+      pendingPhaseRef.current = null; // stable — clear any pending candidate
+      return;
+    }
+
+    // Debounce: require the new phase to hold for 3 s before committing.
+    const now = Date.now();
+    const pending = pendingPhaseRef.current;
+    if (!pending || pending.phase !== phase) {
+      pendingPhaseRef.current = { phase, since: now };
+      return;
+    }
+    if (now - pending.since < 3000) return;
+
+    // Phase confirmed stable — commit.
+    pendingPhaseRef.current = null;
     s.setAcarsPhase(phase);
 
     // Update logbook phase history
@@ -143,8 +162,13 @@ export function useOpsPhaseMessages() {
     const fire = (key: string, msg: string) => {
       const st = useEFBStore.getState();
       if (st.acarsPhasesFired.includes(key)) return;
+      if (!st.enabledOpsMessages.includes(key)) {
+        // Mark as fired even when disabled so it doesn't retroactively send
+        // if the user enables it mid-flight after the phase has passed.
+        st.markAcarsPhaseAsFired(key);
+        return;
+      }
       st.markAcarsPhaseAsFired(key);
-      if (!st.enabledOpsMessages.includes(key)) return;
       injectOps(msg);
     };
 

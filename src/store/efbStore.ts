@@ -152,7 +152,7 @@ export const useEFBStore = create<EFBStore>()(
       simbriefUsername: '',
       setSimbriefUsername: (username) => set({ simbriefUsername: username }),
       ofp: null,
-      setOFP: (ofp) => set({ ofp, acarsPhase: 'preflight', acarsPhasesFired: [] }),
+      setOFP: (ofp) => set({ ofp, acarsPhase: 'unknown', acarsPhasesFired: [] }),
       isLoadingOFP: false,
       setIsLoadingOFP: (loading) => set({ isLoadingOFP: loading }),
       ofpError: null,
@@ -269,11 +269,11 @@ export const useEFBStore = create<EFBStore>()(
         logbookEntries: s.logbookEntries.filter(e => e.id !== id),
       })),
 
-      acarsPhase: 'preflight',
+      acarsPhase: 'unknown',
       acarsPhasesFired: [],
       setAcarsPhase: (phase) => set({ acarsPhase: phase }),
       markAcarsPhaseAsFired: (key) => set(s => ({ acarsPhasesFired: [...s.acarsPhasesFired, key] })),
-      resetAcarsPhaseTracking: () => set({ acarsPhase: 'preflight', acarsPhasesFired: [] }),
+      resetAcarsPhaseTracking: () => set({ acarsPhase: 'unknown', acarsPhasesFired: [] }),
 
       enabledOpsMessages: OPS_MESSAGES.map(m => m.key),
       setOpsMessageEnabled: (key, enabled) => set(s => ({
