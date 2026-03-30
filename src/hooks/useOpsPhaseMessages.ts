@@ -97,9 +97,9 @@ export function useOpsPhaseMessages() {
     const distToOrigin = isFinite(depLat)  ? nmBetween(currentSimPosition.lat, currentSimPosition.lon, depLat, depLon)   : 999;
 
     let phase: string;
-    if (altFt < 800 && groundspeedKts < 5) {
+    if (altFt < 800 && groundspeedKts < 2) {
       phase = distToOrigin < distToDest ? 'preflight' : 'on_block';
-    } else if (altFt < 800 && groundspeedKts >= 5 && groundspeedKts < 80) {
+    } else if (altFt < 800 && groundspeedKts >= 2 && groundspeedKts < 80) {
       phase = distToOrigin < distToDest ? 'taxi_out' : 'taxi_in';
     } else if (altFt < 800 && groundspeedKts >= 80) {
       phase = 'takeoff_roll';
@@ -121,14 +121,17 @@ export function useOpsPhaseMessages() {
       return;
     }
 
-    // Debounce: require the new phase to hold for 3 s before committing.
+    // Debounce: ground phases (taxi) confirm after 1 s, airborne phases after 3 s.
+    // Ground phases need faster response; longer debounce filters SimConnect noise at altitude.
+    const isGroundPhase = altFt < 800;
+    const debounceMs = isGroundPhase ? 1000 : 3000;
     const now = Date.now();
     const pending = pendingPhaseRef.current;
     if (!pending || pending.phase !== phase) {
       pendingPhaseRef.current = { phase, since: now };
       return;
     }
-    if (now - pending.since < 3000) return;
+    if (now - pending.since < debounceMs) return;
 
     // Phase confirmed stable — commit.
     pendingPhaseRef.current = null;
