@@ -2,9 +2,13 @@ import dgram from 'dgram';
 import type { PositionCallback, StatusCallback } from './types.js';
 
 const XPLANE_PORT  = 49000; // X-Plane listens here
-const LISTEN_PORT  = 49002; // We listen here for RPOS replies
+const LISTEN_PORT  = 49002; // We listen here for RPOS/RREF replies
 const RPOS_FREQ    = 2;     // 2 packets per second
 const TIMEOUT_MS   = 5_000; // Consider disconnected after 5s of no data
+
+// DREF subscription for vertical speed (not included in RPOS)
+const VS_DREF_IDX = 1;
+const VS_DREF     = 'sim/flightmodel/position/vh_ind_fpm';
 
 /** X-Plane UDP RPOS connector. Works with X-Plane 11 and 12.
  *  Position data is never cleared on reconnect — only updated when new data arrives. */
@@ -12,22 +16,37 @@ export function startXPlaneConnector(
   onPosition: PositionCallback,
   onStatus: StatusCallback,
 ) {
-  let stopped   = false;
-  let connected = false;
+  let stopped      = false;
+  let connected    = false;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let latestVsFpm  = 0;
 
   const socket = dgram.createSocket('udp4');
 
   socket.bind(LISTEN_PORT, () => {
     sendRposRequest();
+    sendDrefSubscription();
     setInterval(() => {
-      if (!stopped) sendRposRequest();
+      if (!stopped) { sendRposRequest(); sendDrefSubscription(); }
     }, 2_000); // Re-request every 2s in case X-Plane restarts
   });
 
   socket.on('message', (msg) => {
     if (msg.length < 5) return;
     const header = msg.toString('ascii', 0, 4);
+
+    // RREF response — parse subscribed dataref values
+    if (header === 'RREF') {
+      let offset = 5;
+      while (offset + 8 <= msg.length) {
+        const idx = msg.readInt32LE(offset);
+        const val = msg.readFloatLE(offset + 4);
+        if (idx === VS_DREF_IDX) latestVsFpm = val;
+        offset += 8;
+      }
+      return;
+    }
+
     if (header !== 'RPOS') return;
 
     // RPOS response layout (little-endian, starting at offset 5):
@@ -60,7 +79,7 @@ export function startXPlaneConnector(
       altFt:            altM * 3.28084,
       headingTrue:      trueHdg,
       groundspeedKts:   speedMs * 1.94384,
-      verticalSpeedFpm: 0, // RPOS doesn't include VS; omit
+      verticalSpeedFpm: latestVsFpm,
       source:           'xplane',
       timestamp:        Date.now(),
     });
@@ -73,6 +92,16 @@ export function startXPlaneConnector(
     const buf = Buffer.allocUnsafe(9);
     buf.write('RPOS\0', 0, 'ascii');
     buf.writeFloatLE(RPOS_FREQ, 5);
+    socket.send(buf, XPLANE_PORT, '127.0.0.1');
+  }
+
+  function sendDrefSubscription() {
+    // "RREF\0" + int32 frequency + int32 index + char[400] dref path
+    const buf = Buffer.alloc(413);
+    buf.write('RREF\0', 0, 'ascii');
+    buf.writeInt32LE(RPOS_FREQ, 5);
+    buf.writeInt32LE(VS_DREF_IDX, 9);
+    buf.write(VS_DREF, 13, 'ascii');
     socket.send(buf, XPLANE_PORT, '127.0.0.1');
   }
 

@@ -199,7 +199,12 @@ export function useOpsPhaseMessages() {
 
       const today = new Date().toISOString().slice(0, 10);
       const recentEntry = [...s.logbookEntries]
-        .filter(e => e.date === today && e.onBlockUtc && e.id !== s.activeLogbookEntryId)
+        .filter(e =>
+          e.date === today &&
+          e.onBlockUtc &&
+          e.id !== s.activeLogbookEntryId &&
+          e.flightTimeMin >= 10   // ignore test sessions / short spurious entries
+        )
         .sort((a, b) => a.onBlockUtc.localeCompare(b.onBlockUtc))
         .pop();
       if (recentEntry) {

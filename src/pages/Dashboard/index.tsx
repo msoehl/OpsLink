@@ -4,7 +4,7 @@ import { fetchOFP } from '../../services/simbrief/api';
 import { formatTime, formatFuel, formatWeight } from '../../services/simbrief/api';
 import { fetchAllVatsimATIS, type ATISResult } from '../../services/atis/vatsim';
 import { fetchAllIvaoATIS } from '../../services/atis/ivao';
-import { Loader2, RefreshCw, AlertCircle, Plane, Clock, Route, ScrollText, Cloud, Radio, WifiOff, MonitorCheck, FileText } from 'lucide-react';
+import { Loader2, RefreshCw, AlertCircle, Plane, Clock, Route, ScrollText, Cloud, Radio, WifiOff, MonitorCheck, FileText, RotateCcw } from 'lucide-react';
 import type { LogbookEntry } from '../../types/logbook';
 import clsx from 'clsx';
 
@@ -222,7 +222,7 @@ export default function Dashboard() {
   const {
     ofp, setOFP, isLoadingOFP, setIsLoadingOFP,
     ofpError, setOFPError, simbriefUsername, setActivePage, clearAcarsMessages, setCpdlcStation,
-    hoppieConnected, simConnected, simSource, openLogbookEntry,
+    hoppieConnected, simConnected, simSource, openLogbookEntry, resetAcarsPhaseTracking,
   } = useEFBStore();
   const [tab, setTab] = useState<'overview' | 'ofp' | 'weather'>('overview');
 
@@ -409,6 +409,35 @@ export default function Dashboard() {
           <button onClick={() => setTab('ofp')}
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white border border-[var(--c-border)] hover:border-[var(--c-border2)] px-2.5 py-1.5 rounded-lg transition-colors">
             <FileText size={13} /> OFP
+          </button>
+          <button
+            onClick={() => {
+              resetAcarsPhaseTracking();
+              if (ofp) {
+                const entry: LogbookEntry = {
+                  id: `${ofp.params.request_id}-${Date.now()}`,
+                  date: new Date().toISOString().slice(0, 10),
+                  callsign: ofp.atc.callsign,
+                  dep: ofp.origin.icao_code,
+                  arr: ofp.destination.icao_code,
+                  offBlockUtc: '',
+                  onBlockUtc: '',
+                  flightTimeMin: 0,
+                  simulator: null,
+                  notes: '',
+                  phaseHistory: [],
+                  acarsMessages: [],
+                  acType: ofp.aircraft.icaocode,
+                  acReg: ofp.aircraft.reg ?? '',
+                  ofpRequestId: ofp.params.request_id,
+                };
+                openLogbookEntry(entry);
+              }
+            }}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white border border-[var(--c-border)] hover:border-[var(--c-border2)] px-2.5 py-1.5 rounded-lg transition-colors"
+            title="Reset phase tracking for a new flight on the same OFP"
+          >
+            <RotateCcw size={13} /> New Flight
           </button>
           <button
             onClick={loadOFP}

@@ -52,7 +52,7 @@ interface EFBStore {
   hoppieLogon: string;
   setHoppieLogon: (logon: string) => void;
 
-  // Per-waypoint actuals (session only, not persisted)
+  // Per-waypoint actuals (persisted — tied to the loaded OFP)
   waypointActuals: Record<number, { fob: string; ato: string }>;
   setWaypointActual: (idx: number, data: Partial<{ fob: string; ato: string }>) => void;
 
@@ -152,7 +152,7 @@ export const useEFBStore = create<EFBStore>()(
       simbriefUsername: '',
       setSimbriefUsername: (username) => set({ simbriefUsername: username }),
       ofp: null,
-      setOFP: (ofp) => set({ ofp, acarsPhase: 'unknown', acarsPhasesFired: [] }),
+      setOFP: (ofp) => set({ ofp, acarsPhase: 'unknown', acarsPhasesFired: [], waypointActuals: {} }),
       isLoadingOFP: false,
       setIsLoadingOFP: (loading) => set({ isLoadingOFP: loading }),
       ofpError: null,
@@ -273,7 +273,7 @@ export const useEFBStore = create<EFBStore>()(
       acarsPhasesFired: [],
       setAcarsPhase: (phase) => set({ acarsPhase: phase }),
       markAcarsPhaseAsFired: (key) => set(s => ({ acarsPhasesFired: [...s.acarsPhasesFired, key] })),
-      resetAcarsPhaseTracking: () => set({ acarsPhase: 'unknown', acarsPhasesFired: [] }),
+      resetAcarsPhaseTracking: () => set({ acarsPhase: 'unknown', acarsPhasesFired: [], waypointActuals: {} }),
 
       enabledOpsMessages: OPS_MESSAGES.map(m => m.key),
       setOpsMessageEnabled: (key, enabled) => set(s => ({
@@ -300,6 +300,7 @@ export const useEFBStore = create<EFBStore>()(
         enabledOpsMessages: state.enabledOpsMessages,
         acarsPhase: state.acarsPhase,
         acarsPhasesFired: state.acarsPhasesFired,
+        waypointActuals: state.waypointActuals,
       }),
     }
   )
