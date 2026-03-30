@@ -54,8 +54,10 @@ function MapReadyEmitter({ onReady }: { onReady: (map: L.Map) => void }) {
 function planeIcon(heading: number, isOwn: boolean, isSim = false) {
   const color = isSim ? '#f59e0b' : isOwn ? '#4ade80' : '#93c5fd';
   const size  = isSim ? 38 : isOwn ? 36 : 28;
+  // SVG plane points up (north) by default → rotate by heading directly
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" style="transform:rotate(${heading}deg);filter:drop-shadow(0 0 3px rgba(0,0,0,0.9))"><path fill="${color}" d="M12 2 L8 14 L12 11 L16 14 Z M8 14 L7 20 L12 17 L17 20 L16 14"/></svg>`;
   return L.divIcon({
-    html: `<div style="transform:rotate(${heading - 45}deg);font-size:${size}px;line-height:1;color:${color};text-shadow:0 0 6px #000,0 0 3px #000;filter:drop-shadow(0 0 4px rgba(0,0,0,0.9))">✈</div>`,
+    html: svg,
     className: '',
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],

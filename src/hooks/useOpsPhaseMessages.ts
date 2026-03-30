@@ -162,7 +162,7 @@ export function useOpsPhaseMessages() {
     const acType = currentOfp.aircraft.icaocode;
     const acr = currentOfp.aircraft.reg ?? acType;
 
-    const fire = (key: string, msg: string) => {
+    const fire = (key: string, msg: string, delayMs = 0) => {
       const st = useEFBStore.getState();
       if (st.acarsPhasesFired.includes(key)) return;
       if (!st.enabledOpsMessages.includes(key)) {
@@ -172,8 +172,14 @@ export function useOpsPhaseMessages() {
         return;
       }
       st.markAcarsPhaseAsFired(key);
-      injectOps(msg);
+      if (delayMs > 0) {
+        setTimeout(() => injectOps(msg), delayMs);
+      } else {
+        injectOps(msg);
+      }
     };
+
+    const DELAY = 45_000; // ms between staggered OPS messages
 
     if (phase === 'preflight') {
       fire('pax_brief', [
@@ -198,7 +204,7 @@ export function useOpsPhaseMessages() {
         'CATERING LOADED FOR DEPARTURE',
         'PLEASE CONFIRM CATERING UPLIFT',
         'ADVISE ANY SPECIAL MEAL CHANGES',
-      ].join('\n'));
+      ].join('\n'), DELAY);
 
       const today = new Date().toISOString().slice(0, 10);
       const recentEntry = [...s.logbookEntries]
@@ -224,7 +230,7 @@ export function useOpsPhaseMessages() {
             'CONFIRM AIRCRAFT SERVICED AND READY',
             'ADVISE OPS OF ANY OUTSTANDING ITEMS',
             'ACKNOWLEDGE WHEN READY',
-          ].join('\n'));
+          ].join('\n'), DELAY * 2);
         }
       }
 
@@ -241,7 +247,7 @@ export function useOpsPhaseMessages() {
           'CONFIRM CREW REST SCHEDULE AGREED',
           'ADVISE OPS OF ANY REST DISRUPTION',
           'ACKNOWLEDGE WHEN READY',
-        ].join('\n'));
+        ].join('\n'), DELAY * 2);
       }
     }
 
@@ -265,7 +271,7 @@ export function useOpsPhaseMessages() {
           'CONFIRM CREW REST COMPLIANT',
           'HAVE A SAFE NIGHT DEPARTURE',
           'ACKNOWLEDGE WHEN READY',
-        ].join('\n'));
+        ].join('\n'), DELAY);
       }
     }
 
@@ -297,7 +303,7 @@ export function useOpsPhaseMessages() {
         '  CURRENT LEVEL',
         `  ETA ${dst}`,
         'THANK YOU',
-      ].join('\n'));
+      ].join('\n'), DELAY);
 
       const etaMin = groundspeedKts > 0 ? Math.round(distToDest / groundspeedKts * 60) : 90;
       const totalPax = Math.floor(Math.random() * 25 + 3);
@@ -319,7 +325,7 @@ export function useOpsPhaseMessages() {
         '',
         'MIN CONNECT TIME  45 MIN',
         ...(pax3 > 0 ? ['NOTE PRIORITY OFFLOAD RECOMMENDED'] : []),
-      ].join('\n'));
+      ].join('\n'), DELAY * 2);
     }
 
     if (phase === 'descent') {

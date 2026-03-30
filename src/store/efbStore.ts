@@ -60,6 +60,8 @@ interface EFBStore {
   acarsMessages: HoppieMessage[];
   addAcarsMessage: (msg: HoppieMessage) => void;
   clearAcarsMessages: () => void;
+  respondedMessageKeys: string[];
+  markMessageResponded: (key: string) => void;
 
   // CPDLC session (session only)
   cpdlcStation: string;
@@ -177,6 +179,8 @@ export const useEFBStore = create<EFBStore>()(
         return { acarsMessages: updated.length > 500 ? updated.slice(updated.length - 500) : updated };
       }),
       clearAcarsMessages: () => set({ acarsMessages: [] }),
+      respondedMessageKeys: [],
+      markMessageResponded: (key) => set(s => ({ respondedMessageKeys: [...s.respondedMessageKeys, key] })),
 
       cpdlcStation: '',
       setCpdlcStation: (station) => set({ cpdlcStation: station }),
@@ -301,6 +305,7 @@ export const useEFBStore = create<EFBStore>()(
         acarsPhase: state.acarsPhase,
         acarsPhasesFired: state.acarsPhasesFired,
         waypointActuals: state.waypointActuals,
+        respondedMessageKeys: state.respondedMessageKeys,
       }),
     }
   )

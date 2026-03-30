@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useEFBStore } from '../../../store/efbStore';
+import type { HoppieMessage } from '../../../services/hoppie';
 import {
   hoppiePoll, hoppieSend,
 } from '../../../services/hoppie';
@@ -19,19 +20,25 @@ export interface UseMessageActionsReturn {
   replyToMsg: (idx: number, to: string, packet: string, feedback?: string) => void;
   poll: () => Promise<void>;
   testAllPhaseMessages: () => void;
-  respondedIdx: Set<number>;
-  setRespondedIdx: React.Dispatch<React.SetStateAction<Set<number>>>;
+  isResponded: (msg: HoppieMessage) => boolean;
   inlineReply: InlineReply | null;
   setInlineReply: React.Dispatch<React.SetStateAction<InlineReply | null>>;
 }
 
 export function useMessageActions(): UseMessageActionsReturn {
-  const { hoppieLogon, addAcarsMessage } = useEFBStore();
+  const { hoppieLogon, addAcarsMessage, respondedMessageKeys, markMessageResponded } = useEFBStore();
 
   const callsign = useEFBStore(s => s.ofp?.atc?.callsign ?? '');
 
-  const [respondedIdx, setRespondedIdx] = useState<Set<number>>(new Set());
   const [inlineReply, setInlineReply] = useState<InlineReply | null>(null);
+
+  function msgKey(msg: HoppieMessage): string {
+    return `${msg.from ?? ''}|${new Date(msg.receivedAt).getTime()}`;
+  }
+
+  function isResponded(msg: HoppieMessage): boolean {
+    return respondedMessageKeys.includes(msgKey(msg));
+  }
 
   async function sendMsg(to: string, type: string, packet: string) {
     await hoppieSend(hoppieLogon, callsign, to, type, packet);
@@ -39,8 +46,9 @@ export function useMessageActions(): UseMessageActionsReturn {
   }
 
   function replyToMsg(idx: number, to: string, packet: string, feedback?: string) {
+    const msgs = useEFBStore.getState().acarsMessages;
+    if (msgs[idx]) markMessageResponded(msgKey(msgs[idx]));
     sendMsg(to, 'telex', packet).catch(() => {});
-    setRespondedIdx(prev => new Set(prev).add(idx));
     setInlineReply(null);
     if (feedback) {
       const delay = 2500 + Math.random() * 2500;
@@ -164,8 +172,7 @@ export function useMessageActions(): UseMessageActionsReturn {
     replyToMsg,
     poll,
     testAllPhaseMessages,
-    respondedIdx,
-    setRespondedIdx,
+    isResponded,
     inlineReply,
     setInlineReply,
   };
