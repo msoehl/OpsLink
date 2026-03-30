@@ -25,7 +25,7 @@ function nmBetween(lat1: number, lon1: number, lat2: number, lon2: number): numb
 export function injectOps(packet: string) {
   const s = useEFBStore.getState();
   const cs = s.ofp?.atc?.callsign ?? '';
-  s.addAcarsMessage({ from: 'OPSLINK', type: 'telex', packet, receivedAt: new Date() });
+  s.addAcarsMessage({ from: 'OPSLINK', type: 'telex', packet, receivedAt: new Date(), isSent: true });
   s.incrementAcarsUnread();
   if (s.soundEnabled) playOpsBeep();
   if (s.hoppieLogon && cs) {
