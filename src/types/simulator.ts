@@ -5,6 +5,7 @@ export interface SimPosition {
   headingTrue: number;
   groundspeedKts: number;
   verticalSpeedFpm: number;
+  enginesRunning: boolean;
   source: 'msfs' | 'p3d' | 'xplane';
   timestamp: number;
 }

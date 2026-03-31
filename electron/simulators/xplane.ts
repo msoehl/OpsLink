@@ -6,9 +6,11 @@ const LISTEN_PORT  = 49002; // We listen here for RPOS/RREF replies
 const RPOS_FREQ    = 2;     // 2 packets per second
 const TIMEOUT_MS   = 5_000; // Consider disconnected after 5s of no data
 
-// DREF subscription for vertical speed (not included in RPOS)
-const VS_DREF_IDX = 1;
-const VS_DREF     = 'sim/flightmodel/position/vh_ind_fpm';
+// DREF subscriptions (not included in RPOS)
+const VS_DREF_IDX      = 1;
+const VS_DREF          = 'sim/flightmodel/position/vh_ind_fpm';
+const ENGINE_DREF_IDX  = 2;
+const ENGINE_DREF      = 'sim/flightmodel2/engines/engine_is_burning_fuel[0]';
 
 /** X-Plane UDP RPOS connector. Works with X-Plane 11 and 12.
  *  Position data is never cleared on reconnect — only updated when new data arrives. */
@@ -19,7 +21,8 @@ export function startXPlaneConnector(
   let stopped      = false;
   let connected    = false;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let latestVsFpm  = 0;
+  let latestVsFpm        = 0;
+  let latestEngineRunning = false;
 
   const socket = dgram.createSocket('udp4');
 
@@ -41,7 +44,8 @@ export function startXPlaneConnector(
       while (offset + 8 <= msg.length) {
         const idx = msg.readInt32LE(offset);
         const val = msg.readFloatLE(offset + 4);
-        if (idx === VS_DREF_IDX) latestVsFpm = val;
+        if (idx === VS_DREF_IDX)     latestVsFpm         = val;
+        if (idx === ENGINE_DREF_IDX) latestEngineRunning = val > 0.5;
         offset += 8;
       }
       return;
@@ -80,6 +84,7 @@ export function startXPlaneConnector(
       headingTrue:      trueHdg,
       groundspeedKts:   speedMs * 1.94384,
       verticalSpeedFpm: latestVsFpm,
+      enginesRunning:   latestEngineRunning,
       source:           'xplane',
       timestamp:        Date.now(),
     });
@@ -96,13 +101,17 @@ export function startXPlaneConnector(
   }
 
   function sendDrefSubscription() {
-    // "RREF\0" + int32 frequency + int32 index + char[400] dref path
-    const buf = Buffer.alloc(413);
-    buf.write('RREF\0', 0, 'ascii');
-    buf.writeInt32LE(RPOS_FREQ, 5);
-    buf.writeInt32LE(VS_DREF_IDX, 9);
-    buf.write(VS_DREF, 13, 'ascii');
-    socket.send(buf, XPLANE_PORT, '127.0.0.1');
+    // "RREF\0" + int32 frequency + int32 index + char[400] dref path — one packet per DREF
+    function subscribe(idx: number, dref: string) {
+      const buf = Buffer.alloc(413);
+      buf.write('RREF\0', 0, 'ascii');
+      buf.writeInt32LE(RPOS_FREQ, 5);
+      buf.writeInt32LE(idx, 9);
+      buf.write(dref, 13, 'ascii');
+      socket.send(buf, XPLANE_PORT, '127.0.0.1');
+    }
+    subscribe(VS_DREF_IDX,     VS_DREF);
+    subscribe(ENGINE_DREF_IDX, ENGINE_DREF);
   }
 
   return () => {

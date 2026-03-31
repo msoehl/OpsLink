@@ -87,7 +87,7 @@ export function useOpsPhaseMessages() {
     const currentOfp = s.ofp;
     const currentSimPosition = s.simPosition;
     if (!currentSimPosition || !currentOfp) return;
-    const { altFt, groundspeedKts, verticalSpeedFpm } = currentSimPosition;
+    const { altFt, groundspeedKts, verticalSpeedFpm, enginesRunning } = currentSimPosition;
 
     const depLat  = parseFloat(currentOfp.origin.pos_lat);
     const depLon  = parseFloat(currentOfp.origin.pos_long);
@@ -97,8 +97,10 @@ export function useOpsPhaseMessages() {
     const distToOrigin = isFinite(depLat)  && isFinite(depLon)  ? nmBetween(currentSimPosition.lat, currentSimPosition.lon, depLat, depLon)   : 999;
 
     let phase: string;
-    if (altFt < 800 && groundspeedKts < 2) {
+    if (altFt < 800 && groundspeedKts < 2 && !enginesRunning) {
       phase = distToOrigin < distToDest ? 'preflight' : 'on_block';
+    } else if (altFt < 800 && groundspeedKts < 2) {
+      phase = distToOrigin < distToDest ? 'preflight' : 'taxi_in';
     } else if (altFt < 800 && groundspeedKts >= 2 && groundspeedKts < 80) {
       phase = distToOrigin < distToDest ? 'taxi_out' : 'taxi_in';
     } else if (altFt < 800 && groundspeedKts >= 80) {

@@ -31,6 +31,7 @@ export function startSimConnectConnector(
         handle.addToDataDefinition(DEF_ID, 'PLANE HEADING DEGREES TRUE',  'degrees',         SimConnectDataType.FLOAT64);
         handle.addToDataDefinition(DEF_ID, 'GROUND VELOCITY',             'knots',           SimConnectDataType.FLOAT64);
         handle.addToDataDefinition(DEF_ID, 'VERTICAL SPEED',              'feet per minute', SimConnectDataType.FLOAT64);
+        handle.addToDataDefinition(DEF_ID, 'ENG COMBUSTION:1',            'bool',            SimConnectDataType.INT32);
 
         handle.requestDataOnSimObject(
           REQ_ID, DEF_ID,
@@ -51,6 +52,7 @@ export function startSimConnectConnector(
               headingTrue:      d.readFloat64(),
               groundspeedKts:   d.readFloat64(),
               verticalSpeedFpm: d.readFloat64(),
+              enginesRunning:   d.readInt32() !== 0,
               source,
               timestamp: Date.now(),
             });
