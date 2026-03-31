@@ -1228,8 +1228,8 @@ export default function AcarsPage() {
                 : `${ACCENT[accent]} rounded-bl-sm`
             )}>
               <div className="flex items-center justify-between gap-3 mb-1">
-                <span className={clsx('font-semibold text-[10px] uppercase', msg.isSent ? 'text-blue-400' : 'text-green-400')}>
-                  {msg.isSent ? `▲ ${msg.to}` : `▼ ${msg.from}`}
+                <span className={clsx('font-semibold text-[10px] uppercase', msg.isSent && msg.from !== 'OPSLINK' ? 'text-blue-400' : 'text-green-400')}>
+                  {msg.isSent && msg.from !== 'OPSLINK' ? `▲ ${msg.to}` : `▼ ${msg.from}`}
                   <span className="text-gray-600"> · {msg.type.toUpperCase()}</span>
                   {!msg.isSent && (
                     <button onClick={() => { setReplyTo(msg.from ?? null); setMode('telex'); }}

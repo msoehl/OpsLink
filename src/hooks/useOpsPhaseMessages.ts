@@ -25,7 +25,7 @@ function nmBetween(lat1: number, lon1: number, lat2: number, lon2: number): numb
 export function injectOps(packet: string) {
   const s = useEFBStore.getState();
   const cs = s.ofp?.atc?.callsign ?? '';
-  s.addAcarsMessage({ from: 'OPSLINK', type: 'telex', packet, receivedAt: new Date(), isSent: true });
+  s.addAcarsMessage({ from: 'OPSLINK', to: cs || 'CREW', type: 'telex', packet, receivedAt: new Date(), isSent: true });
   s.incrementAcarsUnread();
   if (s.soundEnabled) playOpsBeep();
   if (s.hoppieLogon && cs) {
@@ -93,8 +93,8 @@ export function useOpsPhaseMessages() {
     const depLon  = parseFloat(currentOfp.origin.pos_long);
     const destLat = parseFloat(currentOfp.destination.pos_lat);
     const destLon = parseFloat(currentOfp.destination.pos_long);
-    const distToDest   = isFinite(destLat) ? nmBetween(currentSimPosition.lat, currentSimPosition.lon, destLat, destLon) : 999;
-    const distToOrigin = isFinite(depLat)  ? nmBetween(currentSimPosition.lat, currentSimPosition.lon, depLat, depLon)   : 999;
+    const distToDest   = isFinite(destLat) && isFinite(destLon) ? nmBetween(currentSimPosition.lat, currentSimPosition.lon, destLat, destLon) : 999;
+    const distToOrigin = isFinite(depLat)  && isFinite(depLon)  ? nmBetween(currentSimPosition.lat, currentSimPosition.lon, depLat, depLon)   : 999;
 
     let phase: string;
     if (altFt < 800 && groundspeedKts < 2) {
@@ -138,6 +138,9 @@ export function useOpsPhaseMessages() {
     s.setAcarsPhase(phase);
 
     // Update logbook phase history
+    // closeLogbookEntry is deferred until after all fire() calls so the on_block
+    // message is captured in the logbook's acarsMessages snapshot.
+    let shouldCloseLogbook = false;
     const currentActiveLogbookEntryId = s.activeLogbookEntryId;
     if (currentActiveLogbookEntryId) {
       const entry = s.logbookEntries.find(e => e.id === currentActiveLogbookEntryId);
@@ -150,17 +153,17 @@ export function useOpsPhaseMessages() {
             onBlockUtc: utcNow(),
             simulator: currentSimPosition.source,
           });
-          s.closeLogbookEntry();
+          shouldCloseLogbook = true;
         }
       }
     }
 
-    const cs  = currentOfp.atc.callsign;
-    const dep = currentOfp.origin.icao_code;
-    const dst = currentOfp.destination.icao_code;
-    const u   = currentOfp.general.units?.toUpperCase() === 'LBS' ? 'LBS' : 'KG';
-    const acType = currentOfp.aircraft.icaocode;
-    const acr = currentOfp.aircraft.reg ?? acType;
+    const cs  = currentOfp.atc?.callsign   || currentOfp.general?.icao_airline || '???';
+    const dep = currentOfp.origin?.icao_code      || '????';
+    const dst = currentOfp.destination?.icao_code || '????';
+    const u   = currentOfp.general?.units?.toUpperCase() === 'LBS' ? 'LBS' : 'KG';
+    const acType = currentOfp.aircraft?.icaocode || '????';
+    const acr = currentOfp.aircraft?.reg ?? acType;
 
     const fire = (key: string, msg: string, delayMs = 0) => {
       const st = useEFBStore.getState();
@@ -317,7 +320,7 @@ export function useOpsPhaseMessages() {
       fire('connex', [
         'CONNEX SCHEDULE',
         `FLIGHT ${cs}  ${dep}-${dst}`,
-        `TOTAL CONNEX PAX  ${totalPax + pax3}`,
+        `TOTAL CONNEX PAX  ${totalPax}`,
         '',
         `FROM ${al1}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin - 10)}   ${pax1} PAX`,
         `FROM ${al2}${Math.floor(Math.random() * 900 + 100)}  ARR ${utcPlus(etaMin - 3)}    ${pax2final} PAX`,
@@ -384,6 +387,11 @@ export function useOpsPhaseMessages() {
         'FUEL UPLIFT BEING ARRANGED',
         'CONFIRM ACTUAL FOB AND DEFECTS',
       ].join('\n'));
+    }
+
+    // Close logbook after all fire() calls so the on_block message is included.
+    if (shouldCloseLogbook) {
+      useEFBStore.getState().closeLogbookEntry();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [simPosition]);
