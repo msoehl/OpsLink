@@ -1216,22 +1216,24 @@ export default function AcarsPage() {
         ) : filteredMessages.map(({ m: msg, i }) => {
           const cpdlc = msg.cpdlc ?? (msg.type === 'cpdlc' ? parseCpdlc(msg.packet) ?? undefined : undefined);
           const displayText = (msg.type === 'cpdlc' && cpdlc) ? cpdlc.content : msg.packet;
-          const accent = msg.isSent ? 'none' : msgAccent(displayText);
+          const isOpsMsg = msg.from === 'OPSLINK';
+          const isIncoming = !msg.isSent || isOpsMsg;
+          const accent = isIncoming ? msgAccent(displayText) : 'none';
           const receivedAt = new Date(msg.receivedAt);
-          const pdcParsed = !msg.isSent ? parsePDCMessage(msg.packet) : null;
+          const pdcParsed = isIncoming ? parsePDCMessage(msg.packet) : null;
           return (
-            <div key={i} className={clsx('flex', msg.isSent ? 'justify-end' : 'justify-start')}>
+            <div key={i} className={clsx('flex', isIncoming ? 'justify-start' : 'justify-end')}>
             <div className={clsx(
               'max-w-[92%] rounded-xl p-2.5 text-xs font-mono border',
-              msg.isSent
-                ? 'bg-blue-600/10 border-blue-500/20 rounded-br-sm'
-                : `${ACCENT[accent]} rounded-bl-sm`
+              isIncoming
+                ? `${ACCENT[accent]} rounded-bl-sm`
+                : 'bg-blue-600/10 border-blue-500/20 rounded-br-sm'
             )}>
               <div className="flex items-center justify-between gap-3 mb-1">
-                <span className={clsx('font-semibold text-[10px] uppercase', msg.isSent && msg.from !== 'OPSLINK' ? 'text-blue-400' : 'text-green-400')}>
-                  {msg.isSent && msg.from !== 'OPSLINK' ? `▲ ${msg.to}` : `▼ ${msg.from}`}
+                <span className={clsx('font-semibold text-[10px] uppercase', isIncoming ? 'text-green-400' : 'text-blue-400')}>
+                  {isIncoming ? `▼ ${msg.from}` : `▲ ${msg.to}`}
                   <span className="text-gray-600"> · {msg.type.toUpperCase()}</span>
-                  {!msg.isSent && (
+                  {isIncoming && !isOpsMsg && (
                     <button onClick={() => { setReplyTo(msg.from ?? null); setMode('telex'); }}
                       className="text-[10px] text-gray-600 hover:text-blue-400 transition-colors ml-1" title="Reply">
                       ↩
@@ -1279,7 +1281,7 @@ export default function AcarsPage() {
                 </div>
               )}
               {/* Loadsheet ACPT/REJECT */}
-              {!msg.isSent && msg.packet.includes('REPLY ACPT') && !isResponded(msg) && (
+              {isIncoming && msg.packet.includes('REPLY ACPT') && !isResponded(msg) && (
                 <div className="flex gap-1.5 mt-2">
                   <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINK',
                     `ACPT\nFLIGHT ${callsign}\nLOADSHEET ACKNOWLEDGED ${utcNow()}`,
@@ -1296,7 +1298,7 @@ export default function AcarsPage() {
                 </div>
               )}
               {/* REPORT WHEN LEVEL */}
-              {!msg.isSent && msg.packet.includes('REPORT WHEN LEVEL') && !isResponded(msg) && (
+              {isIncoming && msg.packet.includes('REPORT WHEN LEVEL') && !isResponded(msg) && (
                 <div className="flex gap-1.5 mt-2">
                   <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINK',
                     `WILCO\nFLIGHT ${callsign}\nWILL REPORT WHEN LEVEL`,
@@ -1313,7 +1315,7 @@ export default function AcarsPage() {
                 </div>
               )}
               {/* Cruise check inline form */}
-              {!msg.isSent && msg.packet.includes('PLEASE REPORT:') && msg.packet.includes('FOB') && !isResponded(msg) && (
+              {isIncoming && msg.packet.includes('PLEASE REPORT:') && msg.packet.includes('FOB') && !isResponded(msg) && (
                 inlineReply?.idx === i ? (
                   <div className="mt-2 space-y-1.5">
                     <div className="flex gap-1.5 flex-wrap">
@@ -1349,7 +1351,7 @@ export default function AcarsPage() {
                 )
               )}
               {/* BLOCK IN */}
-              {!msg.isSent && msg.packet.includes('PLEASE REPORT BLOCK IN TIME') && !isResponded(msg) && (
+              {isIncoming && msg.packet.includes('PLEASE REPORT BLOCK IN TIME') && !isResponded(msg) && (
                 <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINK',
                   `BLOCK IN\nFLIGHT ${callsign}\nBLOCK IN TIME  ${utcNow()}`,
                   `BLOCK IN CONFIRMED\nFLIGHT ${callsign}\nGROUND HANDLING PROCEEDING — THANK YOU`)}
@@ -1358,7 +1360,7 @@ export default function AcarsPage() {
                 </button>
               )}
               {/* Fuel uplift confirm */}
-              {!msg.isSent && msg.packet.includes('CONFIRM ACTUAL FOB AND DEFECTS') && !isResponded(msg) && (
+              {isIncoming && msg.packet.includes('CONFIRM ACTUAL FOB AND DEFECTS') && !isResponded(msg) && (
                 <div className="flex gap-1.5 mt-2">
                   <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINK',
                     `CONFIRMED\nFLIGHT ${callsign}\nFOB AS PLANNED — NO DEFECTS`,
@@ -1375,7 +1377,7 @@ export default function AcarsPage() {
                 </div>
               )}
               {/* Catering confirm */}
-              {!msg.isSent && msg.packet.includes('PLEASE CONFIRM CATERING UPLIFT') && !isResponded(msg) && (
+              {isIncoming && msg.packet.includes('PLEASE CONFIRM CATERING UPLIFT') && !isResponded(msg) && (
                 <div className="flex gap-1.5 mt-2">
                   <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINK',
                     `CONFIRMED\nFLIGHT ${callsign}\nCATERING UPLIFT CONFIRMED`,
@@ -1392,7 +1394,7 @@ export default function AcarsPage() {
                 </div>
               )}
               {/* Acknowledge (gate assignment, long haul briefing, short turnaround, night departure) */}
-              {!msg.isSent && msg.packet.includes('ACKNOWLEDGE WHEN READY') && !isResponded(msg) && (
+              {isIncoming && msg.packet.includes('ACKNOWLEDGE WHEN READY') && !isResponded(msg) && (
                 <button onClick={() => replyToMsg(i, msg.from ?? 'OPSLINK',
                   `ACKNOWLEDGED\nFLIGHT ${callsign}\n${utcNow()}`)}
                   className="mt-2 px-3 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors">
