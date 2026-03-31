@@ -19,7 +19,7 @@ export const OPS_MESSAGES = [
   { key: 'connex',           label: 'Connex Schedule',              phase: 'Cruise',    special: false },
   { key: 'descent_wx',       label: 'Destination Weather Advisory', phase: 'Descent',   special: false },
   { key: 'gate_approach',    label: 'Gate Assignment',              phase: 'Approach',  special: false },
-  { key: 'landed',           label: 'Landing Acknowledgement',      phase: 'Taxi In',   special: false },
+  { key: 'landed',           label: 'Landing Acknowledgement',      phase: 'Landed',    special: false },
   { key: 'on_block',         label: 'Block In / Fuel Uplift',       phase: 'On Block',  special: false },
   // Special events — only fire when conditions are met
   { key: 'long_haul',        label: 'Long Haul Briefing',           phase: 'Preflight', special: true  },

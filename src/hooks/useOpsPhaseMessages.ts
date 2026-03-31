@@ -363,7 +363,7 @@ export function useOpsPhaseMessages() {
       ].join('\n'));
     }
 
-    if (phase === 'on_block' && distToDest < 15) {
+    if (phase === 'on_block') {
       const planRamp = currentOfp.fuel.plan_ramp  ?? '—';
       const planLand = currentOfp.fuel.plan_land  ?? '—';
       const enrtBurn = currentOfp.fuel.enroute_burn ?? '—';

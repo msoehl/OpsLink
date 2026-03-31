@@ -115,22 +115,35 @@ function UpdateSection() {
   );
 }
 
+const PHASE_COLORS: Record<string, string> = {
+  Preflight:  'text-amber-400  bg-amber-400/10  border-amber-400/20',
+  'Taxi Out': 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
+  Climb:      'text-sky-400    bg-sky-400/10    border-sky-400/20',
+  Cruise:     'text-blue-400   bg-blue-400/10   border-blue-400/20',
+  Descent:    'text-violet-400 bg-violet-400/10 border-violet-400/20',
+  Approach:   'text-purple-400 bg-purple-400/10 border-purple-400/20',
+  Landed:     'text-green-400  bg-green-400/10  border-green-400/20',
+  'On Block': 'text-teal-400   bg-teal-400/10   border-teal-400/20',
+};
+
 function OpsMessageToggle({ label, phase, enabled, onToggle }: {
   label: string; phase: string; enabled: boolean; onToggle: () => void;
 }) {
+  const badgeColor = PHASE_COLORS[phase] ?? 'text-gray-400 bg-gray-400/10 border-gray-400/20';
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-[var(--c-border)] last:border-0">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-xs text-white truncate">{label}</span>
-        <span className="text-[10px] text-gray-500 bg-[var(--c-depth)] border border-[var(--c-border)] px-1.5 py-0.5 rounded shrink-0">{phase}</span>
+    <div
+      className="flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors hover:bg-white/[0.03] cursor-pointer group"
+      onClick={onToggle}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className={`text-xs font-medium transition-colors ${enabled ? 'text-white' : 'text-gray-500'} truncate`}>{label}</span>
+        <span className={`text-[10px] font-medium border px-1.5 py-0.5 rounded-md shrink-0 ${badgeColor}`}>{phase}</span>
       </div>
-      <button
-        onClick={onToggle}
-        className={`relative w-8 h-[18px] rounded-full transition-colors shrink-0 ml-3 ${enabled ? 'bg-blue-600' : 'bg-[var(--c-border2)]'}`}
-        title={enabled ? 'Disable' : 'Enable'}
+      <div
+        className={`relative w-10 h-[22px] rounded-full transition-all duration-200 shrink-0 ml-4 ${enabled ? 'bg-blue-600' : 'bg-[var(--c-border2)]'}`}
       >
-        <span className={`absolute top-[3px] w-3 h-3 rounded-full bg-white transition-transform ${enabled ? 'translate-x-[17px]' : 'translate-x-[3px]'}`} />
-      </button>
+        <span className={`absolute top-[3px] w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${enabled ? 'translate-x-[22px]' : 'translate-x-[3px]'}`} />
+      </div>
     </div>
   );
 }
@@ -142,10 +155,12 @@ function OpsMessagesSection() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
-        <h3 className="text-sm font-semibold text-white mb-1">OPS Auto-Messages</h3>
-        <p className="text-xs text-gray-500 mb-4">Choose which automatic OPS messages are generated during each flight phase.</p>
-        <div className="space-y-0">
+      <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <h3 className="text-sm font-semibold text-white mb-1">OPS Auto-Messages</h3>
+          <p className="text-xs text-gray-500">Choose which automatic OPS messages are generated during each flight phase.</p>
+        </div>
+        <div className="px-2 pb-2">
           {regular.map(({ key, label, phase }) => (
             <OpsMessageToggle key={key} label={label} phase={phase}
               enabled={enabledOpsMessages.includes(key)}
@@ -154,10 +169,12 @@ function OpsMessagesSection() {
         </div>
       </div>
 
-      <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
-        <h3 className="text-sm font-semibold text-white mb-1">Special Events</h3>
-        <p className="text-xs text-gray-500 mb-4">Conditional messages — only fire when specific criteria are met (route distance, time of day, turnaround time).</p>
-        <div className="space-y-0">
+      <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <h3 className="text-sm font-semibold text-white mb-1">Special Events</h3>
+          <p className="text-xs text-gray-500">Conditional messages — only fire when specific criteria are met (route distance, time of day, turnaround time).</p>
+        </div>
+        <div className="px-2 pb-2">
           {special.map(({ key, label, phase }) => (
             <OpsMessageToggle key={key} label={label} phase={phase}
               enabled={enabledOpsMessages.includes(key)}
