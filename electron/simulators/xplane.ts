@@ -11,6 +11,8 @@ const VS_DREF_IDX      = 1;
 const VS_DREF          = 'sim/flightmodel/position/vh_ind_fpm';
 const ENGINE_DREF_IDX  = 2;
 const ENGINE_DREF      = 'sim/flightmodel2/engines/engine_is_burning_fuel[0]';
+const FUEL_DREF_IDX    = 3;
+const FUEL_DREF        = 'sim/flightmodel/weight/m_fuel_total'; // kg
 
 /** X-Plane UDP RPOS connector. Works with X-Plane 11 and 12.
  *  Position data is never cleared on reconnect — only updated when new data arrives. */
@@ -23,6 +25,7 @@ export function startXPlaneConnector(
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let latestVsFpm        = 0;
   let latestEngineRunning = false;
+  let latestFuelKg: number | null = null;
 
   const socket = dgram.createSocket('udp4');
 
@@ -46,6 +49,7 @@ export function startXPlaneConnector(
         const val = msg.readFloatLE(offset + 4);
         if (idx === VS_DREF_IDX)     latestVsFpm         = val;
         if (idx === ENGINE_DREF_IDX) latestEngineRunning = val > 0.5;
+        if (idx === FUEL_DREF_IDX)   latestFuelKg        = val;
         offset += 8;
       }
       return;
@@ -85,6 +89,7 @@ export function startXPlaneConnector(
       groundspeedKts:   speedMs * 1.94384,
       verticalSpeedFpm: latestVsFpm,
       enginesRunning:   latestEngineRunning,
+      fuelKg:           latestFuelKg,
       source:           'xplane',
       timestamp:        Date.now(),
     });
@@ -112,6 +117,7 @@ export function startXPlaneConnector(
     }
     subscribe(VS_DREF_IDX,     VS_DREF);
     subscribe(ENGINE_DREF_IDX, ENGINE_DREF);
+    subscribe(FUEL_DREF_IDX,   FUEL_DREF);
   }
 
   return () => {

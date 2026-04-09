@@ -127,10 +127,10 @@ function WeatherTab() {
   const [countdown, setCountdown] = useState(300);
 
   const airports = ofp ? [
-    { icao: ofp.origin.icao_code, label: 'Origin', metar: ofp.weather.orig_metar, taf: ofp.weather.orig_taf },
-    { icao: ofp.destination.icao_code, label: 'Destination', metar: ofp.weather.dest_metar, taf: ofp.weather.dest_taf },
+    { icao: ofp.origin.icao_code,      label: 'Origin',      metar: ofp.weather?.orig_metar ?? '', taf: ofp.weather?.orig_taf ?? '' },
+    { icao: ofp.destination.icao_code, label: 'Destination', metar: ofp.weather?.dest_metar ?? '', taf: ofp.weather?.dest_taf ?? '' },
     ...(ofp.alternate?.icao_code
-      ? [{ icao: ofp.alternate.icao_code, label: 'Alternate', metar: ofp.weather.altn_metar, taf: ofp.weather.altn_taf }]
+      ? [{ icao: ofp.alternate.icao_code, label: 'Alternate', metar: ofp.weather?.altn_metar ?? '', taf: ofp.weather?.altn_taf ?? '' }]
       : []),
   ] : [];
 

@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useEFBStore } from '../../store/efbStore';
 import { formatFuel } from '../../services/simbrief/api';
 import type { NavlogFix } from '../../types/simbrief';
-import { FileText, TrendingUp, TrendingDown, Navigation, Info, X } from 'lucide-react';
+import { FileText, TrendingUp, TrendingDown, Navigation, Info, X, Wifi } from 'lucide-react';
 import clsx from 'clsx';
 
 function s(val: unknown): string {
@@ -37,6 +37,14 @@ function fixFob(fix: NavlogFix, planTof: number): number {
   return 0;
 }
 
+function nmBetween(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return 2 * 3440.065 * Math.asin(Math.sqrt(a));
+}
+
 /** UTC HH:MM from unix epoch + elapsed seconds */
 function etoUtc(estOffUnix: string, timeTotalSecs: string): string {
   const base = parseInt(estOffUnix, 10);
@@ -47,17 +55,65 @@ function etoUtc(estOffUnix: string, timeTotalSecs: string): string {
 }
 
 export default function FlightPlan() {
-  const { ofp, waypointActuals, setWaypointActual } = useEFBStore();
+  const { ofp, waypointActuals, setWaypointActual, simPosition, simConnected } = useEFBStore();
 
   const [activeFix, setActiveFix] = useState<number | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [simAutoActive, setSimAutoActive] = useState(true);
   const activeRowRef = useRef<HTMLTableRowElement>(null);
+  const lastAutoFixRef = useRef<number | null>(null);
 
   const actFobInput = activeFix !== null ? (waypointActuals[activeFix]?.fob ?? '') : '';
   const atoInput    = activeFix !== null ? (waypointActuals[activeFix]?.ato ?? '') : '';
 
   function setActFobInput(v: string) { if (activeFix !== null) setWaypointActual(activeFix, { fob: v }); }
   function setAtoInput(v: string)    { if (activeFix !== null) setWaypointActual(activeFix, { ato: v }); }
+
+  // Reset the "last auto fix" ref when auto-tracking is disabled so that
+  // re-enabling it immediately jumps to the current position.
+  useEffect(() => {
+    if (!simAutoActive) lastAutoFixRef.current = null;
+  }, [simAutoActive]);
+
+  // ── Sim auto-tracking ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!simConnected || !simAutoActive || !simPosition || !ofp) return;
+    const allFixes: NavlogFix[] = Array.isArray(ofp.navlog?.fix)
+      ? ofp.navlog.fix
+      : ofp.navlog?.fix ? [ofp.navlog.fix as unknown as NavlogFix] : [];
+
+    // Find the last reporting fix the aircraft has already passed (closest passed fix).
+    // A fix is "passed" when the aircraft is closer to the NEXT fix than to this one,
+    // or when this is the last fix.
+    let bestIdx: number | null = null;
+    let bestDist = Infinity;
+    for (let i = 0; i < allFixes.length; i++) {
+      if (!isReportingFix(allFixes[i])) continue;
+      const fixLat = parseFloat(String(allFixes[i].pos_lat));
+      const fixLon = parseFloat(String(allFixes[i].pos_long));
+      if (!isFinite(fixLat) || !isFinite(fixLon)) continue;
+      const dist = nmBetween(simPosition.lat, simPosition.lon, fixLat, fixLon);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+
+    if (bestIdx === null || bestIdx === lastAutoFixRef.current) return;
+    lastAutoFixRef.current = bestIdx;
+    setActiveFix(bestIdx);
+    setTimeout(() => activeRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+
+    // Auto-fill FOB from sim if available and not already entered manually
+    if (simPosition.fuelKg !== null) {
+      const isLbs = ofp.general?.units?.toUpperCase() === 'LBS';
+      const fobInUnits = isLbs ? Math.round(simPosition.fuelKg * 2.20462) : Math.round(simPosition.fuelKg);
+      const existing = waypointActuals[bestIdx]?.fob;
+      if (!existing) {
+        setWaypointActual(bestIdx, { fob: String(fobInUnits) });
+      }
+    }
+  }, [simPosition, simConnected, simAutoActive, ofp, waypointActuals, setWaypointActual]);
 
   if (!ofp) {
     return (
@@ -119,6 +175,7 @@ export default function FlightPlan() {
 
   function selectFix(idx: number) {
     if (!isReportingFix(fixes[idx])) return;
+    setSimAutoActive(false); // manual click overrides sim auto-tracking
     if (activeFix === idx) {
       setActiveFix(null);
     } else {
@@ -191,6 +248,19 @@ export default function FlightPlan() {
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[10px] text-gray-600 uppercase tracking-wider shrink-0">Live</span>
 
+          {simConnected && (
+            <button
+              onClick={() => setSimAutoActive(v => !v)}
+              className={clsx('flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-colors shrink-0', simAutoActive
+                ? 'text-green-400 border-green-500/30 bg-green-500/10'
+                : 'text-gray-600 border-[var(--c-border)] hover:text-gray-400')}
+              title={simAutoActive ? 'Sim auto-tracking active — click to disable' : 'Enable sim auto-tracking'}
+            >
+              <Wifi size={10} />
+              {simAutoActive ? 'SIM' : 'MAN'}
+            </button>
+          )}
+
           {activeFix !== null ? (
             <span className="flex items-center gap-1.5 text-xs font-mono text-blue-400">
               <Navigation size={11} />
@@ -198,7 +268,9 @@ export default function FlightPlan() {
               {fuelPerFix && <span className="text-gray-600">· Plan {formatFuel(String(activeFobPlan ?? 0), units)}</span>}
             </span>
           ) : (
-            <span className="text-xs text-gray-600 italic">Click a waypoint to start fuel check</span>
+            <span className="text-xs text-gray-600 italic">
+              {simConnected && simAutoActive ? 'Waiting for position data…' : 'Click a waypoint to start fuel check'}
+            </span>
           )}
 
           {activeFix !== null && (
@@ -266,7 +338,7 @@ export default function FlightPlan() {
       </div>
 
       {/* ── Navlog Table ─────────────────────────────────────── */}
-      <div className="overflow-auto flex-1" ref={undefined}>
+      <div className="overflow-auto flex-1">
         <table className="w-full text-xs font-mono">
           <thead className="sticky top-0 bg-[var(--c-depth)] z-10">
             <tr className="text-gray-500 uppercase text-[10px] tracking-wider">
@@ -302,7 +374,7 @@ export default function FlightPlan() {
                   ref={isActive ? activeRowRef : undefined}
                   onClick={() => selectFix(i)}
                   className={clsx(
-                    'border-t border-[#1a2030] transition-colors',
+                    'border-t border-[var(--c-border)] transition-colors',
                     isReporting ? 'cursor-pointer' : 'cursor-default',
                     isActive
                       ? 'bg-blue-600/15 hover:bg-blue-600/20'

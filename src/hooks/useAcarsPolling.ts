@@ -30,6 +30,9 @@ export function useAcarsPolling() {
           const fresh = useEFBStore.getState();
           msgs.forEach(m => {
             fresh.addAcarsMessage(m);
+            if (!m.isSent && m.from !== 'OPSLINK' && Notification.permission === 'granted' && !document.hasFocus()) {
+              new Notification(`ACARS ▼ ${m.from}`, { body: m.packet.slice(0, 120), silent: true });
+            }
             if (fresh.soundEnabled) {
               if (m.type === 'cpdlc') playCpdlcChime();
               else if (m.from?.endsWith('_ATIS') || m.from === 'OPSLINK') playOpsBeep();

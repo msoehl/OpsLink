@@ -32,6 +32,7 @@ export function startSimConnectConnector(
         handle.addToDataDefinition(DEF_ID, 'GROUND VELOCITY',             'knots',           SimConnectDataType.FLOAT64);
         handle.addToDataDefinition(DEF_ID, 'VERTICAL SPEED',              'feet per minute', SimConnectDataType.FLOAT64);
         handle.addToDataDefinition(DEF_ID, 'ENG COMBUSTION:1',            'bool',            SimConnectDataType.INT32);
+        handle.addToDataDefinition(DEF_ID, 'FUEL TOTAL QUANTITY WEIGHT',  'kilograms',       SimConnectDataType.FLOAT64);
 
         handle.requestDataOnSimObject(
           REQ_ID, DEF_ID,
@@ -53,6 +54,7 @@ export function startSimConnectConnector(
               groundspeedKts:   d.readFloat64(),
               verticalSpeedFpm: d.readFloat64(),
               enginesRunning:   d.readInt32() !== 0,
+              fuelKg:           d.readFloat64(),
               source,
               timestamp: Date.now(),
             });

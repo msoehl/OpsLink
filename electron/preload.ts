@@ -14,12 +14,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('update-status', listener);
   },
   onSimPosition: (cb: (pos: unknown) => void) => {
-    ipcRenderer.on('sim:position', (_e, pos) => cb(pos));
-    return () => ipcRenderer.removeAllListeners('sim:position');
+    const listener = (_e: unknown, pos: unknown) => cb(pos);
+    ipcRenderer.on('sim:position', listener);
+    return () => ipcRenderer.removeListener('sim:position', listener);
   },
   onSimStatus: (cb: (status: { connected: boolean; source: string | null }) => void) => {
-    ipcRenderer.on('sim:status', (_e, status) => cb(status));
-    return () => ipcRenderer.removeAllListeners('sim:status');
+    const listener = (_e: unknown, status: { connected: boolean; source: string | null }) => cb(status);
+    ipcRenderer.on('sim:status', listener);
+    return () => ipcRenderer.removeListener('sim:status', listener);
   },
   getSimStatus: () => ipcRenderer.invoke('sim:get-status'),
   appVersion:      () => ipcRenderer.invoke('app:version'),

@@ -6,6 +6,7 @@ export interface SimPosition {
   groundspeedKts: number;
   verticalSpeedFpm: number;
   enginesRunning: boolean;
+  fuelKg: number | null;
   source: 'msfs' | 'p3d' | 'xplane';
   timestamp: number;
 }

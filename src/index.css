@@ -86,6 +86,9 @@ body {
 .leaflet-control-attribution a {
   color: var(--c-text4) !important;
 }
+[data-theme="light"] .leaflet-control-attribution {
+  background: rgba(255,255,255,0.75) !important;
+}
 .leaflet-popup-content-wrapper {
   background: var(--c-surface) !important;
   color: var(--c-text) !important;
@@ -110,7 +113,7 @@ body {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
-  color: #2dd4bf !important;
+  color: #0d9488 !important;
   font-family: monospace !important;
   font-size: 10px !important;
   font-weight: 700 !important;
@@ -120,6 +123,10 @@ body {
   pointer-events: none !important;
 }
 .ctr-sector-label::before { display: none !important; }
+[data-theme="light"] .ctr-sector-label {
+  color: #0f766e !important;
+  text-shadow: 0 0 4px #fff, 0 0 2px #fff !important;
+}
 
 /* Light mode text overrides — Tailwind utilities don't respond to theme automatically */
 [data-theme="light"] .text-white          { color: var(--c-text)  !important; }
@@ -137,10 +144,23 @@ body {
 [data-theme="light"] .text-amber-400      { color: #92400e         !important; }
 [data-theme="light"] .text-green-400      { color: #166534         !important; }
 [data-theme="light"] .text-red-400        { color: #991b1b         !important; }
+[data-theme="light"] .text-yellow-400     { color: #854d0e         !important; }
+[data-theme="light"] .text-purple-400     { color: #6b21a8         !important; }
 [data-theme="light"] .placeholder\:text-gray-500::placeholder { color: var(--c-text4) !important; }
+[data-theme="light"] .placeholder-gray-600::placeholder       { color: var(--c-text4) !important; }
+
+/* hover states — white-based hovers don't work on light backgrounds */
+[data-theme="light"] .hover\:text-white:hover     { color: var(--c-text)  !important; }
+[data-theme="light"] .hover\:text-gray-300:hover  { color: var(--c-text2) !important; }
+[data-theme="light"] .hover\:bg-white\/10:hover   { background-color: var(--c-border) !important; }
+[data-theme="light"] .hover\:bg-white\/\[0\.03\]:hover { background-color: var(--c-depth) !important; }
+
+/* Modal overlay — softer in light mode */
+[data-theme="light"] .bg-black\/70 { background-color: rgba(15,23,42,0.45) !important; }
 
 /* Light mode input backgrounds */
 [data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="number"],
 [data-theme="light"] input[type="password"],
 [data-theme="light"] textarea,
 [data-theme="light"] select {
@@ -159,6 +179,8 @@ body {
 .ofp-html table { border-collapse: collapse; width: 100%; }
 .ofp-html td, .ofp-html th { padding: 1px 6px; }
 .ofp-html b, .ofp-html strong { color: #60a5fa; }
+[data-theme="light"] .ofp-html b,
+[data-theme="light"] .ofp-html strong { color: #1d4ed8 !important; }
 .ofp-html hr { border-color: var(--c-border); margin: 8px 0; }
 .ofp-html [bgcolor] { background-color: transparent !important; }
 .ofp-html font[color] { color: inherit !important; }

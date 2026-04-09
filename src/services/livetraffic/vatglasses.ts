@@ -192,6 +192,17 @@ function featureToRings(f: FirFeature): [number, number][][] {
   return (coordinates as number[][][][]).map(poly => toLatLon(poly[0]));
 }
 
+function circleRings(lat: number, lon: number, radiusNm: number, points = 36): [number, number][][] {
+  const ring: [number, number][] = [];
+  for (let i = 0; i <= points; i++) {
+    const angle = (2 * Math.PI * i) / points;
+    const dlat = (radiusNm / 60) * Math.cos(angle);
+    const dlon = (radiusNm / (60 * Math.cos((lat * Math.PI) / 180))) * Math.sin(angle);
+    ring.push([lat + dlat, lon + dlon]);
+  }
+  return [ring];
+}
+
 export async function fetchControllerSectors(
   controllers: VatsimController[],
 ): Promise<ControllerSector[]> {
@@ -228,8 +239,15 @@ export async function fetchControllerSectors(
   await Promise.all(appCtrl.map(async c => {
     const prefix = c.callsign.split('_')[0].toUpperCase();
     const rings = await loadTraconRings(prefix);
-    if (rings)
+    if (rings) {
       results.push({ callsign: c.callsign, facility: 5, rings });
+    } else if (
+      isFinite(c.latitude) && isFinite(c.longitude) &&
+      !(c.latitude === 0 && c.longitude === 0) &&
+      c.visualRange > 0
+    ) {
+      results.push({ callsign: c.callsign, facility: 5, rings: circleRings(c.latitude, c.longitude, c.visualRange) });
+    }
   }));
 
   return results;

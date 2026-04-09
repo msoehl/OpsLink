@@ -215,21 +215,19 @@ export default function MapPage() {
         ofp?.destination.icao_code ?? '',
         ofp?.alternate?.icao_code,
       ));
-      // Only fetch sector polygons for VATSIM (not IVAO)
       // Use only controllers with valid coordinates (= visible on map) to avoid phantom sectors
-      if (atisNetwork !== 'ivao') {
-        const visible = controllers.filter(c =>
-          isFinite(c.latitude) && isFinite(c.longitude) && !(c.latitude === 0 && c.longitude === 0)
-        );
-        fetchControllerSectors(visible)
-          .then(sectors => { setSectorPolygons(sectors); setSectorError(null); })
-          .catch(e => {
-            if (e instanceof RateLimitError) {
-              setSectorError('GitHub rate limit — sector polygons unavailable');
-            }
-            setSectorPolygons([]);
-          });
-      }
+      // FIR boundaries (vatspy) are real-world ICAO data shared by VATSIM and IVAO
+      const visible = controllers.filter(c =>
+        isFinite(c.latitude) && isFinite(c.longitude) && !(c.latitude === 0 && c.longitude === 0)
+      );
+      fetchControllerSectors(visible)
+        .then(sectors => { setSectorPolygons(sectors); setSectorError(null); })
+        .catch(e => {
+          if (e instanceof RateLimitError) {
+            setSectorError('GitHub rate limit — sector polygons unavailable');
+          }
+          setSectorPolygons([]);
+        });
     } catch {
       setAtcRaw(0);
       setAtc([]);
@@ -252,6 +250,7 @@ export default function MapPage() {
   }, [trafficEnabled, atisNetwork]);
 
   useEffect(() => {
+    setSectorPolygons([]);
     if (atcEnabled) {
       loadAtc();
       atcIntervalRef.current = setInterval(loadAtc, REFRESH_INTERVAL);

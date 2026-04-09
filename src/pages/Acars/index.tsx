@@ -1321,13 +1321,13 @@ export default function AcarsPage() {
                     <div className="flex gap-1.5 flex-wrap">
                       <input value={inlineReply.fob} onChange={e => setInlineReply(r => r && ({ ...r, fob: e.target.value }))}
                         placeholder={`FOB (${fuelUnits})`}
-                        className="flex-1 min-w-[80px] bg-[var(--c-bg)] border border-[var(--c-border)] rounded px-2 py-1 text-[10px] font-mono text-gray-200 placeholder-gray-600 outline-none focus:border-[var(--c-border2)]" />
+                        className="flex-1 min-w-[80px] bg-[var(--c-base)] border border-[var(--c-border)] rounded px-2 py-1 text-[10px] font-mono text-gray-200 placeholder-gray-600 outline-none focus:border-[var(--c-border2)]" />
                       <input value={inlineReply.fl} onChange={e => setInlineReply(r => r && ({ ...r, fl: e.target.value }))}
                         placeholder="FL e.g. 350"
-                        className="flex-1 min-w-[80px] bg-[var(--c-bg)] border border-[var(--c-border)] rounded px-2 py-1 text-[10px] font-mono text-gray-200 placeholder-gray-600 outline-none focus:border-[var(--c-border2)]" />
+                        className="flex-1 min-w-[80px] bg-[var(--c-base)] border border-[var(--c-border)] rounded px-2 py-1 text-[10px] font-mono text-gray-200 placeholder-gray-600 outline-none focus:border-[var(--c-border2)]" />
                       <input value={inlineReply.eta} onChange={e => setInlineReply(r => r && ({ ...r, eta: e.target.value }))}
                         placeholder="ETA e.g. 1430Z"
-                        className="flex-1 min-w-[80px] bg-[var(--c-bg)] border border-[var(--c-border)] rounded px-2 py-1 text-[10px] font-mono text-gray-200 placeholder-gray-600 outline-none focus:border-[var(--c-border2)]" />
+                        className="flex-1 min-w-[80px] bg-[var(--c-base)] border border-[var(--c-border)] rounded px-2 py-1 text-[10px] font-mono text-gray-200 placeholder-gray-600 outline-none focus:border-[var(--c-border2)]" />
                     </div>
                     <div className="flex gap-1.5">
                       <button

@@ -142,7 +142,7 @@ function OpsMessageToggle({ label, phase, enabled, onToggle }: {
       <div
         className={`relative w-10 h-[22px] rounded-full transition-all duration-200 shrink-0 ml-4 ${enabled ? 'bg-blue-600' : 'bg-[var(--c-border2)]'}`}
       >
-        <span className={`absolute top-[3px] w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${enabled ? 'translate-x-[22px]' : 'translate-x-[3px]'}`} />
+        <span className={`absolute top-[3px] w-4 h-4 rounded-full bg-white shadow-md transition-transform duration-200 ${enabled ? 'translate-x-[22px]' : 'translate-x-[3px]'}`} />
       </div>
     </div>
   );

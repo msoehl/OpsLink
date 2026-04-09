@@ -8,6 +8,7 @@ import type { VatsimController } from '../../services/livetraffic/vatsimAtc';
 import type { ControllerSector } from '../../services/livetraffic/vatglasses';
 import { fetchAllVatsimATIS } from '../../services/atis/vatsim';
 import type { ATISResult } from '../../services/atis/vatsim';
+import { fetchAllIvaoATIS } from '../../services/atis/ivao';
 import type { SimPosition } from '../../types/simulator';
 import { useEFBStore } from '../../store/efbStore';
 
@@ -169,11 +170,12 @@ function AtcTooltipContent({ group }: { group: AtcGroup }) {
   const [atisList, setAtisList] = useState<ATISResult[] | 'loading' | 'none'>('loading');
   const sorted = [...group.controllers].sort((a, b) => b.facility - a.facility);
   const topColor = facilityColor(group.topFacility);
+  const atisNetwork = useEFBStore(s => s.atisNetwork);
 
   useEffect(() => {
     if (tab === 'wx' && group.topFacility !== 6 && group.key.length >= 3) {
       if (atisList === 'loading') {
-        fetchAllVatsimATIS(group.key)
+        (atisNetwork === 'ivao' ? fetchAllIvaoATIS : fetchAllVatsimATIS)(group.key)
           .then(results => setAtisList(results.length > 0 ? results : 'none'))
           .catch(() => setAtisList('none'));
       }
@@ -186,7 +188,11 @@ function AtcTooltipContent({ group }: { group: AtcGroup }) {
           .finally(() => setMetarLoading(false));
       }
     }
-  }, [tab, group.key, metar, atisList]);
+  }, [tab, group.key, metar, atisList, atisNetwork]);
+
+  useEffect(() => {
+    setAtisList('loading');
+  }, [atisNetwork]);
 
   return (
     <div style={{ fontFamily: 'monospace', fontSize: '11px', lineHeight: '1.6', minWidth: '220px' }}>

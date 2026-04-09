@@ -77,6 +77,12 @@ export default function App() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--c-base)]">
       {updateReady && forceModal && (

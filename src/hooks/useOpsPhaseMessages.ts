@@ -41,8 +41,14 @@ export const CONNEX_AIRLINES = [
 ];
 
 export function useOpsPhaseMessages() {
-  const { simPosition } = useEFBStore();
+  const { simPosition, ofp } = useEFBStore();
   const autoAtisRef = useRef<Set<string>>(new Set());
+
+  // Clear the auto-ATIS Set when the OFP changes so the same destination
+  // triggers a fresh D-ATIS fetch on the next approach.
+  useEffect(() => {
+    autoAtisRef.current.clear();
+  }, [ofp]);
   // Debounce phase transitions: a new phase must be stable for 3 s before
   // committing. This filters out single-frame SimConnect noise on (re)connect,
   // which would otherwise fire messages from a fresh/empty acarsPhasesFired.
@@ -225,6 +231,11 @@ export function useOpsPhaseMessages() {
         const [hh, mm] = recentEntry.onBlockUtc.replace('Z', '').split(':').map(Number);
         const blockInDate = new Date();
         blockInDate.setUTCHours(hh, mm, 0, 0);
+        // If the computed time is in the future the on-block was before UTC midnight —
+        // roll back one day so the diff stays positive across midnight boundaries.
+        if (blockInDate.getTime() > Date.now()) {
+          blockInDate.setUTCDate(blockInDate.getUTCDate() - 1);
+        }
         const diffMin = (Date.now() - blockInDate.getTime()) / 60000;
         if (diffMin >= 0 && diffMin < 45) {
           fire('short_turnaround', [

@@ -176,7 +176,12 @@ export const useEFBStore = create<EFBStore>()(
       acarsMessages: [],
       addAcarsMessage: (msg) => set(s => {
         const updated = [...s.acarsMessages, { ...msg, receivedAt: new Date(msg.receivedAt) }];
-        return { acarsMessages: updated.length > 500 ? updated.slice(updated.length - 500) : updated };
+        const trimmed = updated.length > 500 ? updated.slice(updated.length - 500) : updated;
+        const validKeys = new Set(trimmed.map(m => `${m.from ?? ''}|${new Date(m.receivedAt).getTime()}`));
+        return {
+          acarsMessages: trimmed,
+          respondedMessageKeys: s.respondedMessageKeys.filter(k => validKeys.has(k)),
+        };
       }),
       clearAcarsMessages: () => set({ acarsMessages: [] }),
       respondedMessageKeys: [],

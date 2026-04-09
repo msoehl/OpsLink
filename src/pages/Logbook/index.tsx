@@ -5,6 +5,43 @@ import { BookOpen, Trash2, Plane, MonitorCheck } from 'lucide-react';
 import clsx from 'clsx';
 import type { LogbookEntry } from '../../types/logbook';
 
+function StatsPanel({ entries }: { entries: LogbookEntry[] }) {
+  if (entries.length === 0) return null;
+  const completed = entries.filter(e => e.onBlockUtc && e.flightTimeMin > 0);
+  const totalHours = completed.reduce((sum, e) => sum + e.flightTimeMin, 0) / 60;
+  const routeCounts: Record<string, number> = {};
+  entries.forEach(e => {
+    if (e.dep && e.arr) {
+      const r = `${e.dep}–${e.arr}`;
+      routeCounts[r] = (routeCounts[r] || 0) + 1;
+    }
+  });
+  const topRoutes = Object.entries(routeCounts).sort(([, a], [, b]) => b - a).slice(0, 3);
+  return (
+    <div className="border-b border-[var(--c-border)] px-4 py-3 shrink-0 space-y-1.5">
+      <div className="flex justify-between text-[10px]">
+        <span className="text-gray-500">Total Hours</span>
+        <span className="font-mono text-white">{totalHours.toFixed(1)}</span>
+      </div>
+      <div className="flex justify-between text-[10px]">
+        <span className="text-gray-500">Flights</span>
+        <span className="font-mono text-white">{completed.length}</span>
+      </div>
+      {topRoutes.length > 0 && (
+        <div className="pt-1.5 border-t border-[var(--c-border)] space-y-1">
+          <div className="text-[9px] text-gray-600 uppercase tracking-wider">Top Routes</div>
+          {topRoutes.map(([route, count]) => (
+            <div key={route} className="flex justify-between text-[10px]">
+              <span className="font-mono text-gray-400">{route}</span>
+              <span className="text-gray-600">×{count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatFlightTime(min: number): string {
   if (!min) return '—';
   const h = Math.floor(min / 60);
@@ -39,6 +76,7 @@ export default function LogbookPage() {
           <span className="text-xs font-medium text-white">Logbook</span>
           <span className="ml-auto text-[10px] text-gray-600">{logbookEntries.length} flights</span>
         </div>
+        <StatsPanel entries={logbookEntries} />
         {logbookEntries.length === 0 ? (
           <div className="flex flex-col items-center justify-center flex-1 text-gray-600 text-xs text-center px-4 gap-2">
             <BookOpen size={32} />
