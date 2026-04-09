@@ -145,6 +145,13 @@ export function useOpsPhaseMessages() {
     pendingPhaseRef.current = null;
     s.setAcarsPhase(phase);
 
+    // New rotation: reset fired keys when entering preflight from on_block or unknown.
+    // This allows preflight messages to fire again on the next turnaround.
+    if (phase === 'preflight' && (prev === 'on_block' || prev === 'unknown')) {
+      s.resetAcarsPhaseTracking();
+      s.setAcarsPhase('preflight');
+    }
+
     // Update logbook phase history
     // closeLogbookEntry is deferred until after all fire() calls so the on_block
     // message is captured in the logbook's acarsMessages snapshot.
