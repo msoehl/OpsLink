@@ -122,12 +122,15 @@ function setupUpdater(win: BrowserWindow) {
   autoUpdater.on('update-not-available', (info) => send('not-available', info));
   autoUpdater.on('error', (err) => {
     const msg = err.message ?? '';
-    if (msg.includes('Unable to find latest release') || msg.includes('No published versions'))
+    console.error('[updater]', msg);
+    if (msg.includes('Unable to find latest release') || msg.includes('No published versions') || msg.includes('404'))
       send('error', 'No release found for this channel.');
-    else if (msg.includes('net::') || msg.includes('ENOTFOUND') || msg.includes('ECONNREFUSED'))
+    else if (msg.includes('403') || msg.includes('rate limit') || msg.includes('429'))
+      send('error', 'GitHub rate limit — try again later.');
+    else if (msg.includes('net::') || msg.includes('ENOTFOUND') || msg.includes('ECONNREFUSED') || msg.includes('EHOSTUNREACH'))
       send('error', 'Network error — check your connection.');
     else
-      send('error', 'Update check failed.');
+      send('error', `Update check failed: ${msg.slice(0, 120)}`);
   });
   autoUpdater.on('download-progress',    (p)    => send('progress', Math.round(p.percent)));
 
