@@ -246,7 +246,8 @@ export async function fetchControllerSectors(
       !(c.latitude === 0 && c.longitude === 0) &&
       c.visualRange > 0
     ) {
-      results.push({ callsign: c.callsign, facility: 5, rings: circleRings(c.latitude, c.longitude, c.visualRange) });
+      const radiusNm = Math.min(c.visualRange, 40);
+      results.push({ callsign: c.callsign, facility: 5, rings: circleRings(c.latitude, c.longitude, radiusNm) });
     }
   }));
 

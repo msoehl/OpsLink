@@ -165,6 +165,13 @@ body {
 [data-theme="light"] .hover\:bg-white\/10:hover   { background-color: var(--c-border) !important; }
 [data-theme="light"] .hover\:bg-white\/\[0\.03\]:hover { background-color: var(--c-depth) !important; }
 
+/* Sidebar + TopBar — depth background is light gray, icons need stronger contrast */
+[data-theme="light"] aside .text-gray-500,
+[data-theme="light"] header .text-gray-500  { color: var(--c-text4) !important; }
+[data-theme="light"] aside button:not(.bg-blue-600):hover,
+[data-theme="light"] header button:hover    { color: var(--c-text) !important; }
+[data-theme="light"] aside .text-blue-300   { color: #1d4ed8 !important; }
+
 /* Modal overlay — softer in light mode */
 [data-theme="light"] .bg-black\/70 { background-color: rgba(15,23,42,0.45) !important; }
 
