@@ -31,7 +31,7 @@ export function useAcarsPolling() {
           msgs.forEach(m => {
             fresh.addAcarsMessage(m);
             if (!m.isSent && m.from !== 'OPSLINK' && Notification.permission === 'granted' && !document.hasFocus()) {
-              new Notification(`ACARS ▼ ${m.from}`, { body: m.packet.slice(0, 120), silent: true });
+              new Notification(`ACARS ▼ ${m.from}`, { body: m.packet.length > 120 ? m.packet.slice(0, 120).replace(/\s\S*$/, '…') : m.packet, silent: true });
             }
             if (fresh.soundEnabled) {
               if (m.type === 'cpdlc') playCpdlcChime();

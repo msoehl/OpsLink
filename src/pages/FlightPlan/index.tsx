@@ -82,21 +82,33 @@ export default function FlightPlan() {
       ? ofp.navlog.fix
       : ofp.navlog?.fix ? [ofp.navlog.fix as unknown as NavlogFix] : [];
 
-    // Find the last reporting fix the aircraft has already passed (closest passed fix).
-    // A fix is "passed" when the aircraft is closer to the NEXT fix than to this one,
-    // or when this is the last fix.
+    // Find the last reporting fix the aircraft has already passed.
+    // A fix is "passed" when the aircraft is closer to the NEXT reporting fix
+    // than the current fix is — i.e. the aircraft is past the midpoint of the leg.
+    const reporting = allFixes
+      .map((f, i) => ({ f, i }))
+      .filter(({ f }) => isReportingFix(f));
+
     let bestIdx: number | null = null;
-    let bestDist = Infinity;
-    for (let i = 0; i < allFixes.length; i++) {
-      if (!isReportingFix(allFixes[i])) continue;
-      const fixLat = parseFloat(String(allFixes[i].pos_lat));
-      const fixLon = parseFloat(String(allFixes[i].pos_long));
-      if (!isFinite(fixLat) || !isFinite(fixLon)) continue;
-      const dist = nmBetween(simPosition.lat, simPosition.lon, fixLat, fixLon);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIdx = i;
-      }
+    for (let k = 0; k < reporting.length - 1; k++) {
+      const { f: fix, i: idx } = reporting[k];
+      const { f: next } = reporting[k + 1];
+      const fixLat = parseFloat(String(fix.pos_lat));
+      const fixLon = parseFloat(String(fix.pos_long));
+      const nextLat = parseFloat(String(next.pos_lat));
+      const nextLon = parseFloat(String(next.pos_long));
+      if (!isFinite(fixLat) || !isFinite(fixLon) || !isFinite(nextLat) || !isFinite(nextLon)) continue;
+      const legDist   = nmBetween(fixLat, fixLon, nextLat, nextLon);
+      const acToNext  = nmBetween(simPosition.lat, simPosition.lon, nextLat, nextLon);
+      if (acToNext < legDist) bestIdx = idx;
+    }
+    // Last fix: select when within 50 nm
+    const lastR = reporting[reporting.length - 1];
+    if (lastR) {
+      const lat = parseFloat(String(lastR.f.pos_lat));
+      const lon = parseFloat(String(lastR.f.pos_long));
+      if (isFinite(lat) && isFinite(lon) && nmBetween(simPosition.lat, simPosition.lon, lat, lon) < 50)
+        bestIdx = lastR.i;
     }
 
     if (bestIdx === null || bestIdx === lastAutoFixRef.current) return;

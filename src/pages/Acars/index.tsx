@@ -1058,7 +1058,7 @@ export default function AcarsPage() {
   const callsign = ofp?.atc?.callsign ?? '';
 
   const {
-    sendMsg, replyToMsg, poll, testAllPhaseMessages,
+    sendMsg, replyToMsg, poll,
     isResponded,
     inlineReply, setInlineReply,
   } = useMessageActions();
@@ -1184,11 +1184,6 @@ export default function AcarsPage() {
         </button>
 
         <div className="flex gap-1.5">
-          <button onClick={testAllPhaseMessages}
-            className="text-[10px] text-amber-500 hover:text-amber-300 border border-amber-500/30 hover:border-amber-400/50 px-2 py-0.5 rounded transition-colors"
-            title="Trigger all auto-messages for testing">
-            ▶ Test
-          </button>
           <button onClick={poll} disabled={hoppiePolling}
             className="text-[10px] text-gray-500 hover:text-gray-300 border border-[var(--c-border)] hover:border-[var(--c-border2)] px-2 py-0.5 rounded transition-colors disabled:opacity-40">
             Refresh

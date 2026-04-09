@@ -54,7 +54,7 @@ export function startSimConnectConnector(
               groundspeedKts:   d.readFloat64(),
               verticalSpeedFpm: d.readFloat64(),
               enginesRunning:   d.readInt32() !== 0,
-              fuelKg:           d.readFloat64(),
+              fuelKg:           (() => { const v = d.readFloat64(); return v > 0 ? v : null; })(),
               source,
               timestamp: Date.now(),
             });

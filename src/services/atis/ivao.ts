@@ -1,5 +1,5 @@
-import axios from 'axios';
 import type { ATISResult } from './vatsim';
+import { fetchIvaoWhazzup } from '../livetraffic/ivaoWhazzup';
 
 interface IvaoATC {
   callsign: string;
@@ -8,18 +8,7 @@ interface IvaoATC {
 }
 
 interface IvaoData {
-  clients: { atcs: IvaoATC[] };
-}
-
-let cache: { data: IvaoData; ts: number } | null = null;
-const TTL_MS = 60_000;
-
-async function getIvaoData(): Promise<IvaoData> {
-  const now = Date.now();
-  if (cache && now - cache.ts < TTL_MS) return cache.data;
-  const response = await axios.get<IvaoData>('https://api.ivao.aero/v2/tracker/whazzup');
-  cache = { data: response.data, ts: now };
-  return response.data;
+  clients?: { atcs?: IvaoATC[] };
 }
 
 function parseAtc(a: IvaoATC): ATISResult {
@@ -39,7 +28,7 @@ export async function fetchIvaoATIS(icao: string): Promise<ATISResult | null> {
 }
 
 export async function fetchAllIvaoATIS(icao: string): Promise<ATISResult[]> {
-  const data = await getIvaoData();
+  const data = await fetchIvaoWhazzup() as IvaoData;
   const re = new RegExp(`^${icao.toUpperCase()}_[A-Z_]*ATIS`, 'i');
-  return (data.clients?.atcs ?? []).filter(a => re.test(a.callsign)).map(parseAtc);
+  return (data.clients?.atcs ?? []).filter((a: IvaoATC) => re.test(a.callsign)).map(parseAtc);
 }

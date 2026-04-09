@@ -1,4 +1,5 @@
 import type { VatsimController } from './vatsimAtc';
+import { fetchIvaoWhazzup } from './ivaoWhazzup';
 
 // IVAO position strings → VATSIM facility numbers (shared interface)
 const POSITION_TO_FACILITY: Record<string, number> = {
@@ -101,9 +102,7 @@ async function fetchAirportCoords(icaos: string[]): Promise<Map<string, { lat: n
 export async function fetchIvaoControllers(): Promise<VatsimController[]> {
   if (cachedControllers && Date.now() - cacheTime < CACHE_MS) return cachedControllers;
 
-  const res = await fetch('https://api.ivao.aero/v2/tracker/whazzup');
-  if (!res.ok) throw new Error('IVAO data unavailable');
-  const data: IvaoWhazzupAtc = await res.json();
+  const data = await fetchIvaoWhazzup() as IvaoWhazzupAtc;
 
   const raw = (data.clients?.atcs ?? []).filter(c => {
     const f = POSITION_TO_FACILITY[c.atcSession?.position?.toUpperCase() ?? ''];

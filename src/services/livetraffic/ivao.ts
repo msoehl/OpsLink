@@ -1,4 +1,5 @@
 import type { VatsimPilot } from './vatsim';
+import { fetchIvaoWhazzup } from './ivaoWhazzup';
 
 interface IvaoPilot {
   callsign: string;
@@ -16,19 +17,11 @@ interface IvaoWhazzup {
   clients?: { pilots?: IvaoPilot[] };
 }
 
-let cachedData: VatsimPilot[] | null = null;
-let cacheTime = 0;
-const CACHE_MS = 25_000;
-
 export async function fetchIvaoTraffic(): Promise<VatsimPilot[]> {
-  if (cachedData && Date.now() - cacheTime < CACHE_MS) return cachedData;
-
-  const res = await fetch('https://api.ivao.aero/v2/tracker/whazzup');
-  if (!res.ok) throw new Error('IVAO data unavailable');
-  const data: IvaoWhazzup = await res.json();
+  const data = await fetchIvaoWhazzup() as IvaoWhazzup;
 
   const pilots = data.clients?.pilots ?? [];
-  cachedData = pilots
+  return pilots
     .filter(p => p.lastTrack)
     .map(p => ({
       callsign: p.callsign,
@@ -38,9 +31,7 @@ export async function fetchIvaoTraffic(): Promise<VatsimPilot[]> {
       groundspeed: p.lastTrack!.groundSpeed,
       heading: p.lastTrack!.heading,
       aircraft: p.flightPlan?.aircraftId ?? '',
-    dep: p.flightPlan?.departureId ?? '',
-    dest: p.flightPlan?.arrivalId ?? '',
+      dep: p.flightPlan?.departureId ?? '',
+      dest: p.flightPlan?.arrivalId ?? '',
     }));
-  cacheTime = Date.now();
-  return cachedData;
 }
